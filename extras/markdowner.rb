@@ -9,25 +9,28 @@ class Markdowner
     exts = [:tagfilter, :autolink, :strikethrough]
     root = CommonMarker.render_doc(text.to_s, [:SMART], exts)
 
-    walk_text_nodes(root){|n| postprocess_text_node(n) }
+    walk_text_nodes(root) {|n| postprocess_text_node(n) }
 
-    ng = Nokogiri::HTML(root.to_html([:SAFE], exts))
+    ng = Nokogiri::HTML(root.to_html([:DEFAULT], exts))
 
     # change <h1>, <h2>, etc. headings to just bold tags
     ng.css("h1, h2, h3, h4, h5, h6").each do |h|
       h.name = "strong"
     end
 
-    if !opts[:allow_images]
-      ng.css("img").remove
-    end
+    # This should happen before adding rel=nofollow to all links
+    convert_images_to_links(ng) unless opts[:allow_images]
 
     # make links have rel=nofollow
     ng.css("a").each do |h|
       h[:rel] = "nofollow" unless (URI.parse(h[:href]).host.nil? rescue false)
     end
 
-    ng.at_css("body").inner_html
+    if ng.at_css("body")
+      ng.at_css("body").inner_html
+    else
+      ""
+    end
   end
 
   def self.walk_text_nodes(node, &block)
@@ -48,7 +51,7 @@ class Markdowner
 
       if User.exists?(:username => user[1..-1])
         link = CommonMarker::Node.new(:link)
-        link.url = "/u/#{user[1..-1]}"
+        link.url = Rails.application.root_url + "u/#{user[1..-1]}"
         node.insert_after(link)
 
         link_text = CommonMarker::Node.new(:text)
@@ -69,6 +72,20 @@ class Markdowner
       else
         node = nil
       end
+    end
+  end
+
+  def self.convert_images_to_links(node)
+    node.css("img").each do |img|
+      link = node.create_element('a')
+
+      link['href'], title, alt = img.attributes
+        .values_at('src', 'title', 'alt')
+        .map(&:to_s)
+
+      link.content = [title, alt, link['href']].find(&:present?)
+
+      img.replace link
     end
   end
 end

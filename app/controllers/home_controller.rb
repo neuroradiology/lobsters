@@ -1,8 +1,12 @@
 class HomeController < ApplicationController
+  include IntervalHelper
+
+  caches_page :about, :chat, :index, :newest, :newest_by_user, :recent, :top, if: CACHE_PAGE
+
   # for rss feeds, load the user's tag filters if a token is passed
-  before_action :find_user_from_rss_token, :only => [ :index, :newest, :saved ]
+  before_action :find_user_from_rss_token, :only => [:index, :newest, :saved]
   before_action { @page = page }
-  before_action :require_logged_in_user, :only => [ :upvoted ]
+  before_action :require_logged_in_user, :only => [:upvoted]
 
   def four_oh_four
     begin
@@ -44,9 +48,9 @@ class HomeController < ApplicationController
       @title = "Privacy"
       render :action => "privacy"
     rescue ActionView::MissingTemplate
-      render :html => "<div class=\"box wide\">" <<
-        "You apparently have no privacy." <<
-        "</div>", :layout => "application"
+      render :html => ("<div class=\"box wide\">" <<
+                      "You apparently have no privacy." <<
+                      "</div>").html_safe, :layout => "application"
     end
   end
 
@@ -66,10 +70,14 @@ class HomeController < ApplicationController
       paginate stories.hottest
     }
 
-    @rss_link ||= { :title => "RSS 2.0",
-      :href => "/rss#{@user ? "?token=#{@user.rss_token}" : ""}" }
-    @comments_rss_link ||= { :title => "Comments - RSS 2.0",
-      :href => "/comments.rss#{@user ? "?token=#{@user.rss_token}" : ""}" }
+    @rss_link ||= {
+      :title => "RSS 2.0",
+      :href => user_token_link("/rss"),
+    }
+    @comments_rss_link ||= {
+      :title => "Comments - RSS 2.0",
+      :href => user_token_link("/comments.rss"),
+    }
 
     @heading = @title = ""
     @cur_url = "/"
@@ -99,8 +107,10 @@ class HomeController < ApplicationController
     @heading = @title = "Newest Stories"
     @cur_url = "/newest"
 
-    @rss_link = { :title => "RSS 2.0 - Newest Items",
-      :href => "/newest.rss#{@user ? "?token=#{@user.rss_token}" : ""}" }
+    @rss_link = {
+      :title => "RSS 2.0 - Newest Items",
+      :href => user_token_link("/newest.rss"),
+    }
 
     respond_to do |format|
       format.html { render :action => "index" }
@@ -116,10 +126,14 @@ class HomeController < ApplicationController
   end
 
   def newest_by_user
-    by_user = User.where(:username => params[:user]).first!
+    by_user = User.find_by!(username: params[:user])
 
     @stories, @show_more = get_from_cache(by_user: by_user) {
-      paginate stories.newest_by_user(by_user)
+      if @user && @user.is_moderator?
+        paginate stories.newest_including_deleted_by_user(by_user)
+      else
+        paginate stories.newest_by_user(by_user)
+      end
     }
 
     @heading = @title = "Newest Stories by #{by_user.username}"
@@ -139,20 +153,14 @@ class HomeController < ApplicationController
 
   def recent
     @stories, @show_more = get_from_cache(recent: true) {
-      scope = if page == 1
-        stories.recent
-      else
-        stories.newest
-      end
-      paginate scope
+      paginate Story.recent(@user, filtered_tag_ids)
     }
 
     @heading = @title = "Recent Stories"
     @cur_url = "/recent"
 
-    # our content changes every page load, so point at /newest.rss to be stable
-    @rss_link = { :title => "RSS 2.0 - Newest Items",
-      :href => "/newest.rss#{@user ? "?token=#{@user.rss_token}" : ""}" }
+    # our list is unstable because upvoted stories get removed, so point at /newest.rss
+    @rss_link = { :title => "RSS 2.0 - Newest Items", :href => user_token_link("/newest.rss") }
 
     render :action => "index"
   end
@@ -162,8 +170,10 @@ class HomeController < ApplicationController
       paginate stories.saved
     }
 
-    @rss_link ||= { :title => "RSS 2.0",
-      :href => "/saved.rss#{@user ? "?token=#{@user.rss_token}" : ""}" }
+    @rss_link ||= {
+      :title => "RSS 2.0",
+      :href => user_token_link("/saved.rss"),
+    }
 
     @heading = @title = "Saved Stories"
     @cur_url = "/saved"
@@ -173,27 +183,33 @@ class HomeController < ApplicationController
       format.rss {
         if @user
           @title = "Private feed of saved stories for #{@user.username}"
-          render :action => "rss", :layout => false
-        else
-          render :action => "rss", :layout => false
         end
+        render :action => "rss", :layout => false
       }
       format.json { render :json => @stories }
     end
   end
 
   def tagged
-    @tag = Tag.where(:tag => params[:tag]).first!
+    tag_params = params[:tag].split(',')
+    @tags = Tag.where(tag: tag_params)
 
-    @stories, @show_more = get_from_cache(tag: @tag) {
-      paginate stories.tagged(@tag)
+    raise ActiveRecord::RecordNotFound unless @tags.length == tag_params.length
+
+    @stories, @show_more = get_from_cache(tags: tag_params.sort.join(',')) do
+      paginate stories.tagged(@tags)
+    end
+
+    @heading = params[:tag]
+    @title = @tags.map do |tag|
+      [tag.tag, tag.description].compact.join(' - ')
+    end.join(' ')
+    @cur_url = tag_url(params[:tag])
+
+    @rss_link = {
+      title: "RSS 2.0 - Tagged #{tags_with_description_for_rss(@tags)}",
+      href: "/t/#{params[:tag]}.rss",
     }
-
-    @heading = @title = @tag.description.blank?? @tag.tag : @tag.description
-    @cur_url = tag_url(@tag.tag)
-
-    @rss_link = { :title => "RSS 2.0 - Tagged #{@tag.tag} (#{@tag.description})",
-      :href => "/t/#{@tag.tag}.rss" }
 
     respond_to do |format|
       format.html { render :action => "index" }
@@ -202,17 +218,10 @@ class HomeController < ApplicationController
     end
   end
 
-  TOP_INTVS = { "d" => "Day", "w" => "Week", "m" => "Month", "y" => "Year" }
   def top
     @cur_url = "/top"
-    length = { :dur => 1, :intv => "Week" }
-
-    if m = params[:length].to_s.match(/\A(\d+)([#{TOP_INTVS.keys.join}])\z/)
-      length[:dur] = m[1].to_i
-      length[:intv] = TOP_INTVS[m[2]]
-
-      @cur_url << "/#{params[:length]}"
-    end
+    length = time_interval(params[:length])
+    @cur_url << "/#{params[:length]}"
 
     @stories, @show_more = get_from_cache(top: true, length: length) {
       paginate stories.top(length)
@@ -220,7 +229,7 @@ class HomeController < ApplicationController
 
     if length[:dur] > 1
       @heading = @title = "Top Stories of the Past #{length[:dur]} " <<
-        length[:intv] << "s"
+                          length[:intv] << "s"
     else
       @heading = @title = "Top Stories of the Past " << length[:intv]
     end
@@ -230,17 +239,19 @@ class HomeController < ApplicationController
 
   def upvoted
     @stories, @show_more = get_from_cache(upvoted: true, user: @user) {
-      paginate @user.upvoted_stories.order('votes.id DESC')
+      paginate @user.upvoted_stories.includes(:tags).order('votes.id DESC')
     }
 
-    @heading = @title = "Your Upvoted Stories"
+    @heading = @title = "Upvoted Stories"
     @cur_url = "/upvoted"
 
-    @rss_link = { :title => "RSS 2.0 - Your Upvoted Stories",
-      :href => "/upvoted.rss#{(@user ? "?token=#{@user.rss_token}" : "")}" }
+    @rss_link = {
+      :title => "RSS 2.0 - Upvoted Stories",
+      :href => user_token_link("/upvoted.rss"),
+    }
 
     respond_to do |format|
-      format.html { render :action => "index" }
+      format.html { render action: :index, layout: 'upvoted' }
       format.rss {
         if @user && params[:token].present?
           @title += " - Private feed for #{@user.username}"
@@ -253,11 +264,12 @@ class HomeController < ApplicationController
   end
 
 private
+
   def filtered_tag_ids
     if @user
-      @user.tag_filters.map{|tf| tf.tag_id }
+      @user.tag_filters.map(&:tag_id)
     else
-      tags_filtered_by_cookie.map{|t| t.id }
+      tags_filtered_by_cookie.map(&:id)
     end
   end
 
@@ -279,12 +291,11 @@ private
     StoriesPaginator.new(scope, page, @user).get
   end
 
-  def get_from_cache(opts={}, &block)
+  def get_from_cache(opts = {}, &block)
     if Rails.env.development? || @user || tags_filtered_by_cookie.any?
       yield
     else
-      key = opts.merge(page: page).sort.map{|k,v| "#{k}=#{v.to_param}"
-        }.join(" ")
+      key = opts.merge(page: page).sort.map {|k, v| "#{k}=#{v.to_param}" }.join(" ")
       begin
         Rails.cache.fetch("stories #{key}", :expires_in => 45, &block)
       rescue Errno::ENOENT => e
@@ -292,5 +303,13 @@ private
         yield
       end
     end
+  end
+
+  def user_token_link(url)
+    @user ? "#{url}?token=#{@user.rss_token}" : url
+  end
+
+  def tags_with_description_for_rss(tags)
+    tags.map {|tag| "#{tag.tag} (#{tag.description})" }.join(' ')
   end
 end

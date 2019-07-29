@@ -18,9 +18,12 @@
 
 vendor/bundle
 public/assets
+public/avatars
+public/sitemap*
 node_modules/
 yarn-error.log
 yarn.lock
+.byebug*
 
 # templates to be created per-site
 app/views/home/privacy.*
@@ -35,7 +38,9 @@ public/apple-touch-icon*
 # files added in production
 lib/tasks/deploy.rake
 config/initializers/production.rb
+config/initializers/development.rb
 config/database.yml
 config/initializers/secret_token.rb
 config/*.sphinx.conf
 config/unicorn.conf.rb
+config/scout_apm.yml

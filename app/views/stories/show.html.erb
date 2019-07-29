@@ -39,8 +39,8 @@
 <% if !@story.previewing %>
   <ol class="comments comments1">
     <% if !@story.is_gone? && !@story.previewing %>
-      <li><%= render "comments/commentbox", :comment => @comment %></li>
-      <script>autosize($("#comment")[0]);</script>
+      <li class="comments_subtree"><%= render "comments/commentbox", :comment => @comment %></li>
+      <% if @user %><script>autosize($("#comment")[0]);</script><% end %>
     <% end %>
 
     <% comments_by_parent = @comments.group_by(&:parent_comment_id) %>
@@ -49,12 +49,21 @@
 
     <% while subtree %>
       <% if (comment = subtree.shift) %>
-        <li>
+        <li class="comments_subtree">
+
+        <% children = comments_by_parent[comment.id] %>
         <%= render "comments/comment", :comment => comment,
           :show_story => (comment.story_id != @story.id),
-          :was_merged => (comment.story_id != @story.id) %>
+          :show_tree_lines => true,
+          :was_merged => (comment.story_id != @story.id),
+          :children => children,
+	  :is_unread => is_unread?(comment) %>
 
-        <% if (children = comments_by_parent[comment.id]) %>
+        <% if ancestors.present? %>
+          <div class="comment_siblings_tree_line"></div>
+        <% end %>
+
+        <% if children %>
           <% ancestors << subtree %>
           <% subtree = children %>
           <ol class="comments">
@@ -66,4 +75,11 @@
       <% end %>
     <% end %>
   </ol>
+<% end %>
+
+<% if !@story.previewing && @story.public_similar_stories.any? %>
+  <div class="box wide">
+    <h4>Stories with similar links:</h4>
+    <%= render partial: "stories/similar", locals: { similar: @story.public_similar_stories } %>
+  </div>
 <% end %>

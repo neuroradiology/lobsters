@@ -1,5 +1,9 @@
-class Invitation < ActiveRecord::Base
+class Invitation < ApplicationRecord
   belongs_to :user
+  belongs_to :new_user, class_name: 'User', inverse_of: nil, optional: true
+
+  scope :used, -> { where.not(:used_at => nil) }
+  scope :unused, -> { where(:used_at => nil) }
 
   validate do
     unless email.to_s.match(/\A[^@ ]+@[^ @]+\.[^ @]+\z/)
@@ -7,8 +11,7 @@ class Invitation < ActiveRecord::Base
     end
   end
 
-  before_validation :create_code,
-    :on => :create
+  before_validation :create_code, :on => :create
 
   def create_code
     (1...10).each do |tries|

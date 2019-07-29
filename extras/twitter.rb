@@ -5,12 +5,16 @@ class Twitter
   @@CONSUMER_KEY = nil
   @@CONSUMER_SECRET = nil
 
+  # You'll need to go to https://apps.twitter.com/, add an app, and
+  # whitelist both /settings and /settings/twitter_callback as Callback URLs
+  # for users to be able to authenticate their Twitter accounts.
+
   # these are set for the account used to post updates in
   # script/post_to_twitter (needs read/write access)
   @@AUTH_TOKEN = nil
   @@AUTH_SECRET = nil
 
-  MAX_TWEET_LEN = 140
+  MAX_TWEET_LEN = 280
 
   # https://t.co/eyW1U2HLtP
   TCO_LEN = 23
@@ -20,8 +24,7 @@ class Twitter
   end
 
   def self.oauth_consumer
-    OAuth::Consumer.new(self.CONSUMER_KEY, self.CONSUMER_SECRET,
-      { :site => "https://api.twitter.com" })
+    OAuth::Consumer.new(self.CONSUMER_KEY, self.CONSUMER_SECRET, :site => "https://api.twitter.com")
   end
 
   def self.oauth_request(req, method = :get, post_data = nil)
@@ -31,8 +34,7 @@ class Twitter
 
     begin
       Timeout.timeout(120) do
-        at = OAuth::AccessToken.new(self.oauth_consumer, self.AUTH_TOKEN,
-          self.AUTH_SECRET)
+        at = OAuth::AccessToken.new(self.oauth_consumer, self.AUTH_TOKEN, self.AUTH_SECRET)
 
         if method == :get
           res = at.get(req)
@@ -56,9 +58,8 @@ class Twitter
   end
 
   def self.token_secret_and_user_from_token_and_verifier(tok, verifier)
-    rt = OAuth::RequestToken.from_hash(self.oauth_consumer,
-      { :oauth_token => tok })
-    at = rt.get_access_token({ :oauth_verifier => verifier })
+    rt = OAuth::RequestToken.from_hash(self.oauth_consumer, :oauth_token => tok)
+    at = rt.get_access_token(:oauth_verifier => verifier)
 
     res = at.get("/1.1/account/verify_credentials.json")
     js = JSON.parse(res.body)
@@ -67,7 +68,7 @@ class Twitter
       return nil
     end
 
-    [ at.token, at.secret, js["screen_name"] ]
+    [at.token, at.secret, js["screen_name"]]
   end
 
   def self.oauth_request_token(state)

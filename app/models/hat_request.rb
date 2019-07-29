@@ -1,7 +1,6 @@
-class HatRequest < ActiveRecord::Base
+class HatRequest < ApplicationRecord
   belongs_to :user
 
-  validates :user, :presence => true
   validates :hat, :presence => true
   validates :link, :presence => true
   validates :comment, :presence => true
@@ -22,7 +21,7 @@ class HatRequest < ActiveRecord::Base
       m.recipient_user_id = self.user_id
       m.subject = "Your hat \"#{self.hat}\" has been approved"
       m.body = "This hat may now be worn when commenting.\n\n" +
-        "This is an automated message."
+               "This is an automated message."
       m.save!
 
       self.destroy

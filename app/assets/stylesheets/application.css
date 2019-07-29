@@ -40,8 +40,11 @@ h1 {
 	font-size: 14pt;
 	font-weight: bold;
 }
+h2 {
+	font-size: 11pt;
+}
 
-div.clear {
+.clear {
 	clear: both;
 }
 
@@ -90,12 +93,6 @@ span.hat span.crown, span.hat a {
 	text-decoration: none;
 }
 
-span.fakea {
-	cursor: pointer;
-	text-decoration: underline;
-	color: gray;
-}
-
 span.na {
 	color: gray;
 	font-style: italic;
@@ -108,7 +105,6 @@ div.shorten_first_p p:first-child {
 pre {
 	overflow-x: auto;
 }
-
 
 /* default form styling */
 
@@ -128,6 +124,7 @@ input[type="search"],
 input[type="password"],
 input[type="email"],
 input[type="number"],
+input[type="url"],
 textarea {
 	border: 1px solid #ccc;
 }
@@ -214,24 +211,17 @@ select::-moz-focus-inner {
 	outline: 0;
 }
 
-div.field_with_errors {
-	display: inline;
-}
-
-div.field_with_errors input[type="text"],
-div.field_with_errors input[type="email"],
-div.field_with_errors input[type="password"],
-div.field_with_errors textarea {
-	border: 1px solid red;
-}
-div.field_with_errors input:focus {
-	border-color: rgba(255,0,0,.8);
-}
-
 input:disabled,
 button:disabled {
 	background-color: #e9e9e9;
 	color: gray;
+}
+
+a.button,
+button.deletion,
+input.deletion {
+  color: darkred;
+  border: 1px solid darkred;
 }
 
 .totp_code::-webkit-inner-spin-button,
@@ -268,19 +258,6 @@ div#inside {
 
 #headerleft {
 	float: left;
-}
-
-#header h1 {
-	font-size: 11pt;
-	margin: 0px;
-	margin-left: 22px;
-	margin-right: 1em;
-	padding: 0px;
-	display: inline;
-}
-#header h1 a {
-	color: #333;
-	text-decoration: none;
 }
 
 #l_holder {
@@ -360,6 +337,10 @@ div#gravatar img {
 	width: 100px;
 }
 
+.help {
+  margin-top: 2em;
+}
+
 /* stories */
 
 ol.stories,
@@ -376,11 +357,14 @@ ol.comments {
 	padding-left: 6px;
 }
 ol.comments1 {
-	margin-left: 0;
+	margin-left: -20px;
 	padding-left: 0;
 }
 ol.comments.comments1 {
 	border-left-color: transparent;
+}
+ol.comments1 > li.comments_subtree {
+	margin-left: 11px;
 }
 
 ol.search_results {
@@ -463,6 +447,8 @@ ol.stories li.story div.story_liner {
 	clear: both;
 	padding-top: 0.4em;
 	padding-bottom: 0.4em;
+	padding-left: 20px;
+	position: relative;
 }
 
 .comment a {
@@ -476,9 +462,6 @@ li div.details {
 	padding-top: 0.1em;
 }
 
-.negative {
-	color: gray !important;
-}
 .negative_1 {
 	opacity: 0.7;
 }
@@ -515,7 +498,7 @@ li.story .description_present {
 	vertical-align: middle;
 }
 
-li.story a.tag {
+li.story a.tag, #leader a.tag {
 	vertical-align: middle;
 }
 
@@ -546,9 +529,24 @@ li input.comment_folder_button {
 li .comment_folder {
 	display: inline-block;
 	font-size: 9pt;
+	color: #aaa;
 	letter-spacing: 0.1em;
-	width: 1.4em;
+	width: 1.5em;
  	cursor: pointer;
+	float: left;
+	text-align: center;
+	margin-right: -0.3em;
+}
+li .comment_folder.comment_folder_inline {
+	display: none;
+	color: inherit;
+	width: 1.4em;
+	float: none;
+	text-align: left;
+	margin-right: 0;
+}
+li .comment_folder.comment_folder_inline.force_inline {
+	display: inline-block;
 }
 li .comment_folder:before {
 	content: "[-]";
@@ -556,14 +554,48 @@ li .comment_folder:before {
 li .comment_folder_button:checked ~ .comment .comment_folder:before {
 	content: "[+]";
 }
-li .comment_folder_button:checked ~ div.comment div.comment_text,
-li .comment_folder_button:checked ~ div.comment div.voters {
+li .comment_folder_button:checked ~ div.comment div.comment_text {
  	display: none;
+}
+li .comment_folder_button:checked ~ div.comment div.voters {
+	visibility: hidden;
+	margin-bottom: -15px;
 }
 li .comment_folder_button:checked ~ ol.comments ol,
 li .comment_folder_button:checked ~ ol.comments div.comment,
 li .comment_folder_button:checked ~ ol.comments li {
  	display: none;
+}
+
+li.comments_subtree {
+	position: relative;
+}
+
+li .comment_parent_tree_line {
+	position: absolute;
+	left: 54px;
+	border-left: 1px dotted #bbb;
+	top: 30px;
+	bottom: 0;
+}
+li .comment_parent_tree_line.score_shown {
+	top: 44px;
+}
+li .comment_parent_tree_line.can_downvote {
+	top: 56px;
+}
+li .comment_parent_tree_line.no_children {
+	border-left-color: transparent;
+}
+li .comment_siblings_tree_line {
+	position: absolute;
+	left: 28px;
+	border-left: 1px dotted #bbb;
+	top: 2em;
+	bottom: 0;
+}
+li:last-child > .comment_siblings_tree_line {
+	border-left-color: transparent;
 }
 
 /* try to force a highlighted comment to stay visible */
@@ -716,6 +748,7 @@ div.comment_text {
 	font-size: 10.5pt;
 	max-width: 700px;
 	word-wrap: break-word;
+	overflow: hidden;
 }
 
 div.comment_text blockquote,
@@ -726,6 +759,14 @@ div.story_text blockquote {
 	padding: 0 0 0 1em;
 	border-left: 2px solid gray;
 }
+
+/* un-italicize italics inside a blockquote */
+div.comment_text blockquote em, 
+div.markdown_help blockquote em, 
+div.story_text blockquote em {
+    font-style: normal
+}
+
 div#collapsed_story_text div.story_text blockquote {
 	font-style: normal;
 }
@@ -753,24 +794,13 @@ div.comment_text code {
 	line-height: 1.2em;
 }
 
-a.pagelink {
-	border: 1px solid #ddd;
-	background-color: #fbfbfb;
-	padding: 4px 8px;
-}
-a.pagelink.curpage {
-	border: 1px solid gray;
-	background-color: white;
-	font-weight: bold;
-}
-
 
 #downvote_why {
 	position: absolute;
 	width: 100px;
 	border: 1px solid #ccc;
 	border-bottom: 0;
-	z-index: 2;
+	z-index: 15;
 }
 #downvote_why a {
 	background-color: white;
@@ -817,7 +847,7 @@ div.markdown_help_label {
 }
 
 .comment .preview {
-	padding-left: 25px;
+	padding-left: 17px;
 }
 
 div#story_preview {
@@ -837,15 +867,22 @@ div#story_box input#story_moderation_reason,
 div#story_box input#story_merge_story_short_id {
 	width: 600px;
 }
+div#story_box .title-reminder {
+	display: none;
+}
 div#story_box #story_tags_a {
 	width: 624px;
 }
 div#story_box textarea {
 	width: 600px;
 }
-div#story_box div.actions {
+div#story_box .actions {
 	margin-left: 7em;
 	width: 610px;
+}
+
+div.comment_form_container {
+	margin-left: -11px;
 }
 
 div.comment_form_container form {
@@ -856,6 +893,11 @@ div.comment_form_container form {
 div.comment_form_container textarea {
 	box-sizing: border-box;
 	width: 100%;
+}
+
+span.comment_unread {
+    color: #ac130d;
+    font-weight: 600;
 }
 
 /* trees */
@@ -919,17 +961,18 @@ ul.user_tree {
 	color: #888;
 }
 
+/* /mod dashbaord */
+
+.modmodlog .mod td:first-child {
+	border-left: 2pt solid #ac130d;
+}
+.nominal {
+	color: #ac130d;
+	font-size: 2em;
+	text-align: center;
+}
 
 /* data tables */
-
-table.data caption {
-	font-weight: bold;
-	text-align: left;
-	padding-bottom: 3px;
-}
-table.data .capright {
-	float: right;
-}
 
 table.data th {
 	background-color: #eaeaea;
@@ -956,23 +999,10 @@ table.data tr.bold td {
 	font-weight: bold;
 }
 
-table.thread td {
-	padding: 0px 0px 0px 3px;
-	margin-bottom: 0px;
-	line-height: 17px;
-	/* text-vertical-align: middle; */
-	overflow: hidden;
-}
-table.thread td img {
-	vertical-align: middle;
-}
-
-table.data tr.row0 td,
 table.data.zebra tr:nth-child(even) td {
 	background-color: #f8f8f8;
 	border-bottom: 1px solid #eaeaea;
 }
-table.data tr.row1 td,
 table.data.zebra tr:nth-child(odd) td {
 	background-color: #f5f5f5;
 	border-bottom: 1px solid #eaeaea;
@@ -981,10 +1011,8 @@ table.data tr.nobottom td {
 	border-bottom: 0px;
 	padding-bottom: 0px;
 }
-
-table.data tr.void td, table.data tr.void td a {
-	text-decoration: line-through;
-	color: gray !important;
+table.data.tall td {
+	vertical-align: top;
 }
 
 table.data td p:first-child {
@@ -993,6 +1021,10 @@ table.data td p:first-child {
 table.data td p:last-child {
 	margin-bottom: 0;
 }
+table.data pre {
+	overflow-x: scroll;
+	max-width: 800px;
+}
 
 
 /* boxes */
@@ -1000,15 +1032,6 @@ table.data td p:last-child {
 	border: 0;
 	margin: 0 40px;
 	padding: 0;
-}
-.box_submitter {
-	border: 1px solid #cacaca;
-	border-top: 0px;
-	background-color: #eaeaea;
-	padding: 1em;
-}
-.box_submitter input {
-	width: 10em;
 }
 
 .box .legend {
@@ -1027,17 +1050,7 @@ table.data td p:last-child {
 	float: right;
 }
 
-.box .boxtitle {
-	background-color: #f0f0f0;
-	border-bottom: 1px solid #cacaca;
-	display: block;
-	font-weight: bold;
-	margin: -3px -7px 4px -7px;
-	padding: 3px 5px 3px 5px;
-}
-
-.box label,
-.box .label_holder {
+.box label {
 	display: block;
 	float: left;
 	margin-bottom: 4px;
@@ -1071,8 +1084,7 @@ table.data td p:last-child {
 	width: 75%;
 }
 
-.box label,
-.box .label_holder {
+.box label {
 	width: 7em;
 	line-height: 2em;
 	vertical-align: middle;
@@ -1101,30 +1113,14 @@ table.data td p:last-child {
 	vertical-align: middle;
 }
 
-.box .label_holder label,
-.box .label_holder input {
-	line-height: 2.5em;
-	vertical-align: middle;
-}
-
 .hint {
 	color: gray;
 	font-style: italic;
 	margin-left: 1em;
 }
 
-.hintblock {
-	color: gray;
-	font-style: italic;
-	margin-left: 7em;
-}
-
-.box.wide label,
-.box.wide .label_holder {
+.box.wide label {
 	width: 12em;
-}
-.box.wide .hintblock {
-	margin-left: 12em;
 }
 .box.wide div.d {
 	margin-left: 12em;
@@ -1136,11 +1132,11 @@ table.data td p:last-child {
 div.flash-error,
 div.flash-notice,
 div.flash-success,
+div.downvoteWarning,
 div.errorExplanation {
 	position: relative;
 	padding: 7px 15px;
 	margin-bottom: 18px;
-	color: white;
 	background-color: #eedc94;
 	background-repeat: repeat-x;
 	background-image: linear-gradient(top, #fceec1, #eedc94);
@@ -1162,8 +1158,7 @@ div.errorExplanation a {
 }
 div.flash-error p a,
 div.flash-notice p a,
-div.flash-success p a,
-div.errorExplanation a {
+div.flash-success p a {
 	color: #ffffff;
 }
 div.flash-error p,
@@ -1182,10 +1177,10 @@ div.errorExplanation div {
 }
 div.flash-error,
 div.errorExplanation {
-	background-color: #c43c35;
+	background-color: #fdcfcc;
 	background-repeat: repeat-x;
 	background-image: linear-gradient(top, #ee5f5b, #c43c35);
-	text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.25);
+	text-shadow: none;
 	border-color: #c43c35 #c43c35 #882a25;
 	border-color: rgba(0, 0, 0, 0.1) rgba(0, 0, 0, 0.1) rgba(0, 0, 0, 0.25);
 }
@@ -1212,26 +1207,6 @@ div.flash-success h2,
 div.errorExplanation h2 {
 	font-size: 1.25em;
 	margin: 0;
-}
-
-div#flasher {
-    position: fixed;
-    top: -40px;
-	right: 0px;
-	left: 325px;
-	text-align: center;
-	z-index: 15;
-	height: 1px;
-}
-div#flasher div.flash-error,
-div#flasher div.flash-notice,
-div#flasher div.flash-success {
-	display: inline-block;
-	padding-top: 25px;
-	margin-left: auto;
-	margin-right: auto;
-}
-div#flasher span#flashcontent {
 }
 
 
