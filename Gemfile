@@ -1,6 +1,6 @@
 source "https://rubygems.org"
 
-gem "rails", "~> 5.2.0"
+gem "rails", "~> 5.2"
 
 gem "mysql2"
 
@@ -29,17 +29,18 @@ gem "rotp"
 gem "rqrcode"
 
 # parsing
-gem "nokogiri", ">= 1.7.2"
+gem "pdf-reader"
+gem "nokogiri", ">= 1.10.8"
 gem "htmlentities"
 gem "commonmarker", "~> 0.14"
 
 gem "oauth" # for twitter-posting bot
 gem "mail" # for parsing incoming mail
+gem "ruumba" # tests views
 gem "sitemap_generator" # for better search engine indexing
+gem 'transaction_retry' # mitigate https://github.com/lobsters/lobsters-ansible/issues/39
 
-gem "ruumba"
-
-gem "scout_apm", :git => 'https://github.com/scoutapp/scout_apm_ruby.git', :ref => '574b0a6'
+gem "scout_apm", "2.6.2"
 
 group :test, :development do
   gem 'bullet'

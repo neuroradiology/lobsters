@@ -5,7 +5,7 @@ require 'rspec/rails'
 
 # Requires supporting ruby files with custom matchers and macros, etc,
 # in spec/support/ and its subdirectories.
-Dir[Rails.root.join("spec/support/**/*.rb")].each {|f| require f }
+Dir[Rails.root.join("spec/support/**/*.rb")].sort.each {|f| require f }
 
 RSpec.configure do |config|
   # ## Mock Framework
@@ -57,8 +57,8 @@ RSpec.configure do |config|
   config.infer_spec_type_from_file_location!
   config.raise_errors_for_deprecations!
 
-  config.include AuthenticationHelper::ControllerHelper, type: :controller
   config.include AuthenticationHelper::FeatureHelper, type: :feature
+  config.include AuthenticationHelper::RequestHelper, type: :request
 
   config.filter_rails_from_backtrace!
   config.filter_gems_from_backtrace \

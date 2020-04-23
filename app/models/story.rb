@@ -1,5 +1,6 @@
 class Story < ApplicationRecord
   belongs_to :user
+  belongs_to :domain, optional: true
   belongs_to :merged_into_story,
              :class_name => "Story",
              :foreign_key => "merged_story_id",
@@ -98,6 +99,10 @@ class Story < ApplicationRecord
   validates :title, length: { :in => 3..150 }
   validates :description, length: { :maximum => (64 * 1024) }
   validates :url, length: { :maximum => 250, :allow_nil => true }
+  validates :short_id, presence: true, length: { :maximum => 6 }
+  validates :markeddown_description, length: { :maximum => 16_777_215, :allow_nil => true }
+  validates :story_cache, length: { :maximum => 16_777_215, :allow_nil => true }
+  validates :twitter_id, length: { :maximum => 20, :allow_nil => true }
 
   validates_each :merged_story_id do |record, _attr, value|
     if value.to_i == record.id
@@ -125,13 +130,6 @@ class Story < ApplicationRecord
   # drop these words from titles when making URLs
   TITLE_DROP_WORDS = ["", "a", "an", "and", "but", "in", "of", "or", "that", "the", "to"].freeze
 
-  # link shortening and other ad tracking domains
-  TRACKING_DOMAINS = %w{ 1url.com 7.ly adf.ly al.ly bc.vc bit.do bit.ly bitly.com buzurl.com cur.lv
-  cutt.us db.tt db.tt doiop.com ey.io filoops.info goo.gl is.gd ity.im j.mp lnkd.in ow.ly ph.dog
-  po.st prettylinkpro.com q.gs qr.ae qr.net research.eligrey.com scrnch.me s.id sptfy.com t.co
-  tinyarrows.com tiny.cc tinyurl.com tny.im tr.im tweez.md twitthis.com u.bb u.to v.gd vzturl.com
-  wp.me ➡.ws ✩.ws x.co yep.it yourls.org zip.net }.freeze
-
   # URI.parse is not very lenient, so we can't use it
   URL_RE = /\A(?<protocol>https?):\/\/(?<domain>([^\.\/]+\.)+[a-z]+)(?<port>:\d+)?(\/|\z)/i.freeze
 
@@ -140,7 +138,7 @@ class Story < ApplicationRecord
 
   attr_accessor :editing_from_suggestions, :editor, :fetching_ip, :is_hidden_by_cur_user,
                 :is_saved_by_cur_user, :moderation_reason, :previewing, :seen_previous, :vote
-  attr_writer :fetched_content
+  attr_writer :fetched_response
 
   before_validation :assign_short_id_and_upvote, :on => :create
   before_create :assign_initial_hotness
@@ -153,6 +151,7 @@ class Story < ApplicationRecord
     if self.url.present?
       already_posted_recently?
       check_not_tracking_domain
+      check_not_new_domain_from_new_user
       errors.add(:url, "is not valid") unless url.match(URL_RE)
     elsif self.description.to_s.strip == ""
       errors.add(:description, "must contain text if no URL posted")
@@ -179,22 +178,31 @@ class Story < ApplicationRecord
     if most_recent_similar && most_recent_similar.is_recent?
       errors.add(:url, "has already been submitted within the past #{RECENT_DAYS} days")
       true
+    elsif most_recent_similar && self.user.is_new?
+      errors.add(:url, "cannot be resubmitted by new users")
+      true
     else
       false
     end
   end
 
+  def check_not_new_domain_from_new_user
+    return unless self.url.present? && self.new_record? && self.domain
+
+    if self.domain.new_record? && self.user.is_new?
+      ModNote.tattle_on_story_domain!(self, "new user with new")
+      errors.add(:url, "is an unseen domain from a new user")
+    end
+  end
+
   def check_not_tracking_domain
-    return unless self.url.present? && self.new_record?
+    return unless self.url.present? && self.new_record? && self.domain
 
-    if TRACKING_DOMAINS.include?(domain)
-      ModNote.create!(
-        moderator: InactiveUser.inactive_user,
-        user: self.user,
-        created_at: Time.current,
-        note: "Attempted to post a tracking url: #{self.url}"
-      )
-
+    if self.domain.banned?
+      ModNote.tattle_on_story_domain!(self, "banned")
+      errors.add(:url, "is from banned domain #{self.domain.domain}: #{self.domain.banned_reason}")
+    elsif self.domain.is_tracker
+      ModNote.tattle_on_story_domain!(self, "tracking")
       errors.add(:url, "is a link shortening or ad tracking domain")
     end
   end
@@ -278,7 +286,7 @@ class Story < ApplicationRecord
   end
 
   def archive_url
-    "https://archive.is/#{CGI.escape(self.url)}"
+    "https://archive.md/#{CGI.escape(self.url)}"
   end
 
   def as_json(options = {})
@@ -397,6 +405,11 @@ class Story < ApplicationRecord
         # stories can have inactive tags as long as they existed before
         raise "#{u.username} cannot add inactive tag #{t.tag.tag}"
       end
+
+      if u.is_new? && !t.tag.permit_by_new_users?
+        errors.add(:base, "New users can't submit #{t.tag.tag} stories, please wait. " <<
+          "If the tag is appropriate, leaving it off to skirt this restriction is a bad idea.")
+      end
     end
 
     if self.taggings.reject {|t| t.marked_for_destruction? || t.tag.is_media? }.empty?
@@ -494,7 +507,7 @@ class Story < ApplicationRecord
   end
 
   def is_downvotable?
-    if self.created_at && self.score >= DOWNVOTABLE_MIN_SCORE
+    if self.created_at && self.score > DOWNVOTABLE_MIN_SCORE
       Time.current - self.created_at <= DOWNVOTABLE_DAYS.days
     else
       false
@@ -635,6 +648,12 @@ class Story < ApplicationRecord
 
   def short_id_url
     Rails.application.root_url + "s/#{self.short_id}"
+  end
+
+  def show_score_to_user?(u)
+    return true if u && u.is_moderator?
+    # cast nil to 0, only show score if user hasn't flagged
+    (!vote || vote[:vote].to_i >= 0)
   end
 
   def tagging_changes
@@ -824,13 +843,9 @@ class Story < ApplicationRecord
     end
   end
 
-  def domain
-    return @domain if @domain
-    set_domain self.url.match(URL_RE) if self.url
-  end
-
-  def set_domain match
-    @domain = match ? match[:domain].sub(/^www\d*\./, '') : nil
+  def set_domain(match)
+    name = match ? match[:domain].sub(/^www\d*\./, '') : nil
+    self.domain = name ? Domain.where(domain: name).first_or_initialize : nil
   end
 
   def url=(u)
@@ -845,7 +860,7 @@ class Story < ApplicationRecord
         @url_port = nil
       end
     end
-    set_domain match
+    set_domain(match)
 
     # strip out tracking query params
     if (match = u.match(/\A([^\?]+)\?(.+)\z/))
@@ -900,32 +915,9 @@ class Story < ApplicationRecord
     }.join(", ")
   end
 
-  def fetched_attributes
-    return @fetched_attributes if @fetched_attributes
-
-    @fetched_attributes = {
-      :url => self.url,
-      :title => "",
-    }
-
-    # security: do not connect to arbitrary user-submitted ports
-    return @fetched_attributes if @url_port
-
-    if !@fetched_content
-      begin
-        s = Sponge.new
-        s.timeout = 3
-        # User submitted URLs may have an incorrect https certificate, but we
-        # don't want to fail the retrieval for this. Security risk is minimal.
-        s.ssl_verify = false
-        user_agent = { "User-agent" => "#{Rails.application.domain} for #{fetching_ip}" }
-        @fetched_content = s.fetch(url, :get, nil, nil, user_agent, 3).body.force_encoding('utf-8')
-      rescue
-        return @fetched_attributes
-      end
-    end
-
-    parsed = Nokogiri::HTML(@fetched_content.to_s)
+  def fetched_attributes_html
+    converted = @fetched_response.body.force_encoding('utf-8')
+    parsed = Nokogiri::HTML(converted.to_s)
 
     # parse best title from html tags
     # try <meta property="og:title"> first, it probably won't have the site
@@ -971,17 +963,83 @@ class Story < ApplicationRecord
 
     @fetched_attributes[:title] = title
 
-    # now get canonical version of url (though some cms software puts incorrect
-    # urls here, hopefully the user will notice)
+    # attempt to get the canonical url if it can be parsed,
+    # if it is not the domain root path, and if it
+    # responds to GET with a 200-level code
     begin
-      if (cu = parsed.at_css("link[rel='canonical']").attributes["href"] .text).present? &&
-         (ucu = URI.parse(cu)) && ucu.scheme.present? &&
-         ucu.host.present?
-        @fetched_attributes[:url] = cu
-      end
+      cu = canonical_target(parsed)
+      @fetched_attributes[:url] = cu if valid_canonical_uri?(cu)
     rescue
     end
 
     @fetched_attributes
+  end
+
+  def fetched_attributes_pdf
+    return @fetched_attributes = {} if @fetched_response.body.length >= 5.megabytes
+
+    # pdf-reader only accepts a stream or filename
+    pdf_stream = StringIO.new(@fetched_response.body)
+    pdf = PDF::Reader.new(pdf_stream)
+
+    title = pdf.info[:Title]
+
+    @fetched_attributes[:title] = title
+    @fetched_attributes
+  end
+
+  def fetched_attributes
+    return @fetched_attributes if @fetched_attributes
+
+    @fetched_attributes = {
+      :url => self.url,
+      :title => "",
+    }
+
+    # security: do not connect to arbitrary user-submitted ports
+    return @fetched_attributes if @url_port
+
+    begin
+      # if we haven't had a test inject a response into us
+      if !@fetched_response
+        s = Sponge.new
+        s.timeout = 3
+        # User submitted URLs may have an incorrect https certificate, but we
+        # don't want to fail the retrieval for this. Security risk is minimal.
+        s.ssl_verify = false
+        user_agent = { "User-agent" => "#{Rails.application.domain} for #{fetching_ip}" }
+        res = s.fetch(url, :get, nil, nil, user_agent, 3)
+        @fetched_response = res
+      end
+
+      case @fetched_response["content-type"]
+      when /pdf/
+        return fetched_attributes_pdf
+      else
+        return fetched_attributes_html
+      end
+    rescue
+      return @fetched_attributes
+    end
+  end
+
+private
+
+  def valid_canonical_uri?(url)
+    ucu = URI.parse(url)
+    new_page = ucu &&
+               ucu.scheme.present? &&
+               ucu.host.present? &&
+               ucu.path != "/"
+
+    return false unless new_page
+
+    res = Sponge.new.fetch(url)
+
+    res.code.to_s =~ /\A2.*\Z/
+  end
+
+  def canonical_target(parsed)
+    parsed.at_css("link[rel='canonical']").attributes["href"].text
   end
 end

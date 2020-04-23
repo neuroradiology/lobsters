@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema.define(version: 2019_05_29_133507) do
+ActiveRecord::Schema.define(version: 2020_02_10_155624) do
 
   create_table "comments", id: :bigint, unsigned: true, options: "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4", force: :cascade do |t|
     t.datetime "created_at", null: false
@@ -40,13 +40,23 @@ ActiveRecord::Schema.define(version: 2019_05_29_133507) do
     t.index ["user_id"], name: "index_comments_on_user_id"
   end
 
+  create_table "domains", options: "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4", force: :cascade do |t|
+    t.string "domain"
+    t.boolean "is_tracker", default: false, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.datetime "banned_at"
+    t.integer "banned_by_user_id"
+    t.string "banned_reason", limit: 200
+  end
+
   create_table "hat_requests", id: :bigint, unsigned: true, options: "ENGINE=InnoDB DEFAULT CHARSET=utf8", force: :cascade do |t|
     t.datetime "created_at"
     t.datetime "updated_at"
     t.bigint "user_id", null: false, unsigned: true
-    t.string "hat", collation: "utf8mb4_general_ci"
-    t.string "link", collation: "utf8mb4_general_ci"
-    t.text "comment", collation: "utf8mb4_general_ci"
+    t.string "hat", null: false
+    t.string "link", null: false
+    t.text "comment", null: false
     t.index ["user_id"], name: "hat_requests_user_id_fk"
   end
 
@@ -73,8 +83,8 @@ ActiveRecord::Schema.define(version: 2019_05_29_133507) do
   create_table "invitation_requests", id: :bigint, unsigned: true, options: "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4", force: :cascade do |t|
     t.string "code"
     t.boolean "is_verified", default: false
-    t.string "email"
-    t.string "name"
+    t.string "email", null: false
+    t.string "name", null: false
     t.text "memo"
     t.string "ip_address"
     t.datetime "created_at", null: false
@@ -111,6 +121,7 @@ ActiveRecord::Schema.define(version: 2019_05_29_133507) do
     t.boolean "deleted_by_author", default: false
     t.boolean "deleted_by_recipient", default: false
     t.bigint "hat_id", unsigned: true
+    t.index ["author_user_id"], name: "author_user_id"
     t.index ["hat_id"], name: "index_messages_on_hat_id"
     t.index ["recipient_user_id"], name: "messages_recipient_user_id_fk"
     t.index ["short_id"], name: "random_hash", unique: true
@@ -138,11 +149,14 @@ ActiveRecord::Schema.define(version: 2019_05_29_133507) do
     t.text "reason", limit: 16777215
     t.boolean "is_from_suggestions", default: false
     t.bigint "tag_id", unsigned: true
+    t.integer "domain_id"
     t.index ["comment_id"], name: "moderations_comment_id_fk"
     t.index ["created_at"], name: "index_moderations_on_created_at"
+    t.index ["domain_id"], name: "index_moderations_on_domain_id"
     t.index ["moderator_user_id"], name: "moderations_moderator_user_id_fk"
     t.index ["story_id"], name: "moderations_story_id_fk"
     t.index ["tag_id"], name: "moderations_tag_id_fk"
+    t.index ["user_id"], name: "index_moderations_on_user_id"
   end
 
   create_table "read_ribbons", id: :bigint, unsigned: true, options: "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4", force: :cascade do |t|
@@ -184,8 +198,10 @@ ActiveRecord::Schema.define(version: 2019_05_29_133507) do
     t.string "twitter_id", limit: 20
     t.boolean "user_is_author", default: false
     t.boolean "user_is_following", default: false, null: false
+    t.bigint "domain_id"
     t.index ["created_at"], name: "index_stories_on_created_at"
     t.index ["description"], name: "index_stories_on_description", type: :fulltext
+    t.index ["domain_id"], name: "index_stories_on_domain_id"
     t.index ["hotness"], name: "hotness_idx"
     t.index ["is_expired", "is_moderated"], name: "is_idxes"
     t.index ["is_expired"], name: "index_stories_on_is_expired"
@@ -193,6 +209,7 @@ ActiveRecord::Schema.define(version: 2019_05_29_133507) do
     t.index ["merged_story_id"], name: "index_stories_on_merged_story_id"
     t.index ["short_id"], name: "unique_short_id", unique: true
     t.index ["story_cache"], name: "index_stories_on_story_cache", type: :fulltext
+    t.index ["story_cache"], name: "stories_story_cache", type: :fulltext
     t.index ["title"], name: "index_stories_on_title", type: :fulltext
     t.index ["twitter_id"], name: "index_stories_on_twitter_id"
     t.index ["url"], name: "url", length: 191
@@ -239,6 +256,7 @@ ActiveRecord::Schema.define(version: 2019_05_29_133507) do
     t.boolean "is_media", default: false
     t.boolean "inactive", default: false
     t.float "hotness_mod", default: 0.0
+    t.boolean "permit_by_new_users", default: true, null: false
     t.index ["tag"], name: "tag", unique: true
   end
 
@@ -302,6 +320,7 @@ ActiveRecord::Schema.define(version: 2019_05_29_133507) do
   add_foreign_key "invitations", "users", column: "new_user_id", name: "invitations_new_user_id_fk"
   add_foreign_key "invitations", "users", name: "invitations_user_id_fk"
   add_foreign_key "messages", "hats", name: "messages_hat_id_fk"
+  add_foreign_key "messages", "users", column: "author_user_id", name: "messages_ibfk_1"
   add_foreign_key "messages", "users", column: "recipient_user_id", name: "messages_recipient_user_id_fk"
   add_foreign_key "mod_notes", "users", column: "moderator_user_id", name: "mod_notes_moderator_user_id_fk"
   add_foreign_key "mod_notes", "users", name: "mod_notes_user_id_fk"
@@ -313,6 +332,7 @@ ActiveRecord::Schema.define(version: 2019_05_29_133507) do
   add_foreign_key "read_ribbons", "users", name: "read_ribbons_user_id_fk"
   add_foreign_key "saved_stories", "stories", name: "saved_stories_story_id_fk"
   add_foreign_key "saved_stories", "users", name: "saved_stories_user_id_fk"
+  add_foreign_key "stories", "domains"
   add_foreign_key "stories", "stories", column: "merged_story_id", name: "stories_merged_story_id_fk"
   add_foreign_key "stories", "users", name: "stories_user_id_fk"
   add_foreign_key "suggested_taggings", "stories", name: "suggested_taggings_story_id_fk"
@@ -331,8 +351,7 @@ ActiveRecord::Schema.define(version: 2019_05_29_133507) do
   add_foreign_key "votes", "stories", name: "votes_story_id_fk"
   add_foreign_key "votes", "users", name: "votes_user_id_fk"
 
-  create_view "replying_comments",  sql_definition: <<-SQL
-      select `read_ribbons`.`user_id` AS `user_id`,`comments`.`id` AS `comment_id`,`read_ribbons`.`story_id` AS `story_id`,`comments`.`parent_comment_id` AS `parent_comment_id`,`comments`.`created_at` AS `comment_created_at`,`parent_comments`.`user_id` AS `parent_comment_author_id`,`comments`.`user_id` AS `comment_author_id`,`stories`.`user_id` AS `story_author_id`,`read_ribbons`.`updated_at` < `comments`.`created_at` AS `is_unread`,(select `votes`.`vote` from `votes` where `votes`.`user_id` = `read_ribbons`.`user_id` and `votes`.`comment_id` = `comments`.`id`) AS `current_vote_vote`,(select `votes`.`reason` from `votes` where `votes`.`user_id` = `read_ribbons`.`user_id` and `votes`.`comment_id` = `comments`.`id`) AS `current_vote_reason` from (((`read_ribbons` join `comments` on(`comments`.`story_id` = `read_ribbons`.`story_id`)) join `stories` on(`stories`.`id` = `comments`.`story_id`)) left join `comments` `parent_comments` on(`parent_comments`.`id` = `comments`.`parent_comment_id`)) where `read_ribbons`.`is_following` = 1 and `comments`.`user_id` <> `read_ribbons`.`user_id` and `comments`.`is_deleted` = 0 and `comments`.`is_moderated` = 0 and (`parent_comments`.`user_id` = `read_ribbons`.`user_id` or `parent_comments`.`user_id` is null and `stories`.`user_id` = `read_ribbons`.`user_id`) and `comments`.`upvotes` - `comments`.`downvotes` >= 0 and (`parent_comments`.`id` is null or `parent_comments`.`upvotes` - `parent_comments`.`downvotes` >= 0 and `parent_comments`.`is_moderated` = 0 and `parent_comments`.`is_deleted` = 0) and !exists(select 1 from (`votes` `f` join `comments` `c` on(`f`.`comment_id` = `c`.`id`)) where `f`.`vote` < 0 and `f`.`user_id` = `parent_comments`.`user_id` and `c`.`user_id` = `comments`.`user_id` and `f`.`story_id` = `comments`.`story_id`) and cast(`stories`.`upvotes` as signed) - cast(`stories`.`downvotes` as signed) >= 0
+  create_view "replying_comments", sql_definition: <<-SQL
+      select `read_ribbons`.`user_id` AS `user_id`,`comments`.`id` AS `comment_id`,`read_ribbons`.`story_id` AS `story_id`,`comments`.`parent_comment_id` AS `parent_comment_id`,`comments`.`created_at` AS `comment_created_at`,`parent_comments`.`user_id` AS `parent_comment_author_id`,`comments`.`user_id` AS `comment_author_id`,`stories`.`user_id` AS `story_author_id`,`read_ribbons`.`updated_at` < `comments`.`created_at` AS `is_unread`,(select `votes`.`vote` from `votes` where `votes`.`user_id` = `read_ribbons`.`user_id` and `votes`.`comment_id` = `comments`.`id`) AS `current_vote_vote`,(select `votes`.`reason` from `votes` where `votes`.`user_id` = `read_ribbons`.`user_id` and `votes`.`comment_id` = `comments`.`id`) AS `current_vote_reason` from (((`read_ribbons` join `comments` on(`comments`.`story_id` = `read_ribbons`.`story_id`)) join `stories` on(`stories`.`id` = `comments`.`story_id`)) left join `comments` `parent_comments` on(`parent_comments`.`id` = `comments`.`parent_comment_id`)) where `read_ribbons`.`is_following` = 1 and `comments`.`user_id` <> `read_ribbons`.`user_id` and `comments`.`is_deleted` = 0 and `comments`.`is_moderated` = 0 and (`parent_comments`.`user_id` = `read_ribbons`.`user_id` or `parent_comments`.`user_id` is null and `stories`.`user_id` = `read_ribbons`.`user_id`) and `comments`.`upvotes` - `comments`.`downvotes` >= 0 and (`parent_comments`.`id` is null or `parent_comments`.`upvotes` - `parent_comments`.`downvotes` >= 0 and `parent_comments`.`is_moderated` = 0 and `parent_comments`.`is_deleted` = 0) and !exists(select 1 from (`votes` `f` join `comments` `c` on(`f`.`comment_id` = `c`.`id`)) where `f`.`vote` < 0 and `f`.`user_id` = `parent_comments`.`user_id` and `c`.`user_id` = `comments`.`user_id` and `f`.`story_id` = `comments`.`story_id` limit 1) and cast(`stories`.`upvotes` as signed) - cast(`stories`.`downvotes` as signed) >= 0
   SQL
-
 end

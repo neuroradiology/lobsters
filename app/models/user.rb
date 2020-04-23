@@ -75,6 +75,7 @@ class User < ApplicationRecord
   end
 
   validates :email,
+            :length => { :maximum => 100 },
             :format => { :with => /\A[^@ ]+@[^@ ]+\.[^@ ]+\Z/ },
             :uniqueness => { :case_sensitive => false }
 
@@ -87,7 +88,23 @@ class User < ApplicationRecord
   VALID_USERNAME = /[A-Za-z0-9][A-Za-z0-9_-]{0,24}/.freeze
   validates :username,
             :format => { :with => /\A#{VALID_USERNAME}\z/ },
+            :length => { :maximum => 50 },
             :uniqueness => { :case_sensitive => false }
+
+  validates :password_reset_token,
+            :length => { :maximum => 75 }
+  validates :session_token,
+            :length => { :maximum => 75 }
+  validates :about,
+            :length => { :maximum => 16_777_215 }
+  validates :rss_token,
+            :length => { :maximum => 75 }
+  validates :mailing_list_token,
+            :length => { :maximum => 75 }
+  validates :banned_reason,
+            :length => { :maximum => 200 }
+  validates :disabled_invite_reason,
+            :length => { :maximum => 200 }
 
   validates_each :username do |record, attr, value|
     if BANNED_USERNAMES.include?(value.to_s.downcase) || value.starts_with?('tag-')
@@ -110,12 +127,12 @@ class User < ApplicationRecord
   end
 
   BANNED_USERNAMES = ["admin", "administrator", "contact", "fraud", "guest",
-    "help", "hostmaster", "inactive-user", "lobster", "lobsters", "mailer-daemon", "moderator",
+    "help", "hostmaster", "lobster", "lobsters", "mailer-daemon", "moderator",
     "moderators", "nobody", "postmaster", "root", "security", "support",
     "sysop", "webmaster", "enable", "new", "signup",].freeze
 
   # days old accounts are considered new for
-  NEW_USER_DAYS = 7
+  NEW_USER_DAYS = 70
 
   # minimum karma required to be able to offer title/tag suggestions
   MIN_KARMA_TO_SUGGEST = 10
@@ -134,13 +151,6 @@ class User < ApplicationRecord
 
   # minimum number of submitted stories before checking self promotion
   MIN_STORIES_CHECK_SELF_PROMOTION = 2
-
-  def self.recalculate_all_karmas!
-    User.all.find_each do |u|
-      u.karma = u.stories.map(&:score).sum + u.comments.map(&:score).sum
-      u.save!
-    end
-  end
 
   def self.username_regex_s
     "/^" + VALID_USERNAME.to_s.gsub(/(\?-mix:|\(|\))/, "") + "$/"
@@ -280,7 +290,7 @@ class User < ApplicationRecord
   end
 
   def can_invite?
-    !banned_from_inviting? && self.can_submit_stories?
+    !self.is_new? && !banned_from_inviting? && self.can_submit_stories?
   end
 
   def can_offer_suggestions?
@@ -368,6 +378,7 @@ class User < ApplicationRecord
       self.check_session_token
 
       self.deleted_at = Time.current
+      self.good_riddance?
       self.save!
     end
   end
@@ -391,6 +402,17 @@ class User < ApplicationRecord
   def disable_2fa!
     self.totp_secret = nil
     self.save!
+  end
+
+  # ensures some users talk to a mod before reactivating
+  def good_riddance?
+    return if self.is_banned? # https://www.youtube.com/watch?v=UcZzlPGnKdU
+    self.email = "#{self.username}@lobsters.example" if \
+      self.karma < 0 ||
+      (self.comments.where('created_at >= now() - interval 30 day AND is_moderated').count +
+       self.stories.where('created_at >= now() - interval 30 day AND is_expired AND is_moderated')
+         .count >= 3) ||
+      DownvotedCommenters.new('90d').check_list_for(self)
   end
 
   def grant_moderatorship_by_user!(user)
@@ -439,6 +461,7 @@ class User < ApplicationRecord
   end
 
   def is_new?
+    return true unless self.created_at # unsaved object; in signup flow or a test
     Time.current - self.created_at <= NEW_USER_DAYS.days
   end
 

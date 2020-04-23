@@ -29,6 +29,7 @@ Rails.application.routes.draw do
   get "/upvoted/page/:page", to: redirect('/upvoted/stories/page/%{page}')
 
   get "/top" => "home#top"
+  get "/top/rss" => "home#top", :format => "rss"
   get "/top/page/:page" => "home#top"
   get "/top/:length" => "home#top"
   get "/top/:length/page/:page" => "home#top"
@@ -65,10 +66,14 @@ Rails.application.routes.draw do
   get "/t/:tag" => "home#tagged", :as => "tag"
   get "/t/:tag/page/:page" => "home#tagged"
 
+  get "/domain/:name" => "home#for_domain", :as => "domain", :constraints => { name: /[^\/]+/ }
+  get "/domain/:name/page/:page" => "home#for_domain", :constraints => { name: /[^\/]+/ }
+
   get "/search" => "search#index"
   get "/search/:q" => "search#index"
 
-  resources :stories do
+  resources :stories, except: [:index] do
+    get '/stories/:short_id', to: redirect('/s/%{short_id}')
     post "upvote"
     post "downvote"
     post "unvote"
@@ -84,8 +89,9 @@ Rails.application.routes.draw do
   post "/stories/preview" => "stories#preview"
   post "/stories/check_url_dupe" => "stories#check_url_dupe"
 
-  resources :comments do
+  resources :comments, except: [:new, :destroy] do
     member do
+      get "/comments/:id" => "comments#redirect_from_short_id"
       get "reply"
       post "upvote"
       post "downvote"

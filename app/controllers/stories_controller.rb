@@ -119,8 +119,15 @@ class StoriesController < ApplicationController
     # @story was already loaded by track_story_reads for logged-in users
     @story ||= Story.where(short_id: params[:id]).first!
     if @story.merged_into_story
-      flash[:success] = "\"#{@story.title}\" has been merged into this story."
-      return redirect_to @story.merged_into_story.comments_path
+      respond_to do |format|
+        format.html {
+          flash[:success] = "\"#{@story.title}\" has been merged into this story."
+          return redirect_to @story.merged_into_story.comments_path
+        }
+        format.json {
+          return redirect_to(story_path(@story.merged_into_story, format: :json))
+        }
+      end
     end
 
     if !@story.can_be_seen_by_user?(@user)
@@ -250,7 +257,7 @@ class StoriesController < ApplicationController
   end
 
   def unvote
-    if !(story = find_story)
+    if !(story = find_story) || story.is_gone?
       return render :plain => "can't find story", :status => 400
     end
 
@@ -262,8 +269,12 @@ class StoriesController < ApplicationController
   end
 
   def upvote
-    if !(story = find_story)
+    if !(story = find_story) || story.is_gone?
       return render :plain => "can't find story", :status => 400
+    end
+
+    if story.merged_into_story
+      return render :plain => "story has been merged", :status => 400
     end
 
     Vote.vote_thusly_on_story_or_comment_for_user_because(
@@ -274,7 +285,7 @@ class StoriesController < ApplicationController
   end
 
   def downvote
-    if !(story = find_story)
+    if !(story = find_story) || story.is_gone?
       return render :plain => "can't find story", :status => 400
     end
 
@@ -298,6 +309,10 @@ class StoriesController < ApplicationController
       return render :plain => "can't find story", :status => 400
     end
 
+    if story.merged_into_story
+      return render :plain => "story has been merged", :status => 400
+    end
+
     HiddenStory.hide_story_for_user(story.id, @user.id)
 
     render :plain => "ok"
@@ -318,6 +333,10 @@ class StoriesController < ApplicationController
       return render :plain => "can't find story", :status => 400
     end
 
+    if story.merged_into_story
+      return render :plain => "story has been merged", :status => 400
+    end
+
     SavedStory.save_story_for_user(story.id, @user.id)
 
     render :plain => "ok"
@@ -335,7 +354,8 @@ class StoriesController < ApplicationController
 
   def check_url_dupe
     raise ActionController::ParameterMissing.new("No URL") unless story_params[:url].present?
-    @story = Story.new(story_params)
+    @story = Story.new(user: @user)
+    @story.attributes = story_params
     @story.already_posted_recently?
 
     respond_to do |format|
