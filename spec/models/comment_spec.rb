@@ -37,4 +37,31 @@ describe Comment do
     comment = build(:comment, markeddown_comment: "a" * 16_777_216)
     expect(comment).to_not be_valid
   end
+
+  describe ".accessible_to_user" do
+    it "when user is a moderator" do
+      moderator = build(:user, :moderator)
+
+      expect(Comment.accessible_to_user(moderator)).to eq(Comment.all)
+    end
+
+    it "when user does not a moderator" do
+      user = build(:user)
+
+      expect(Comment.accessible_to_user(user)).to eq(Comment.active)
+    end
+  end
+
+  it "subtracts karma if mod intervenes" do
+    author = create(:user)
+    voter = create(:user)
+    mod = create(:user, :moderator)
+    c = create(:comment, user: author)
+    expect {
+      Vote.vote_thusly_on_story_or_comment_for_user_because(1, c.story_id, c.id, voter.id, nil)
+    }.to change { author.reload.karma }.by(1)
+    expect {
+      c.delete_for_user(mod, "Troll")
+    }.to change { author.reload.karma }.by(-4)
+  end
 end

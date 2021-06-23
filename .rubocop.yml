@@ -19,6 +19,7 @@ AllCops:
     - 'bin/**/*'
     - 'db/**/*'
     - 'vendor/**/*'
+  UseCache: false
 
 # Cop configuration:
 
@@ -62,6 +63,10 @@ Layout/SpaceInsideRangeLiteral:
 # Lint
 Lint/SuppressedException:
   Enabled: false
+Lint/RaiseException:
+  Enabled: true
+Lint/StructNewOverride:
+  Enabled: true
 
 # Metrics
 Metrics/AbcSize:
@@ -186,8 +191,14 @@ Style/FrozenStringLiteralComment:
   EnforcedStyle: never
 Style/GuardClause:
   Enabled: false
+Style/HashEachMethods:
+  Enabled: true
 Style/HashSyntax:
   EnforcedStyle: no_mixed_keys
+Style/HashTransformKeys:
+  Enabled: true
+Style/HashTransformValues:
+  Enabled: true
 Style/IfInsideElse:
   Enabled: false
 Style/IfUnlessModifier:

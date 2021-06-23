@@ -8,27 +8,23 @@ module ApplicationHelper
       :class => "avatar",
       :size => "#{size}x#{size}",
       :alt => "#{user.username} avatar",
+      :loading => "lazy",
+      :decoding => "async",
     )
   end
 
-  def break_long_words(str, len = 30)
-    safe_join(str.split(" ").map {|w|
-      if w.length > len
-        safe_join(w.split(/(.{#{len}})/), "<wbr>".html_safe)
-      else
-        w
-      end
-    }, " ")
-  end
-
-  def errors_for(object, _message = nil)
+  def errors_for(object)
     html = ""
     unless object.errors.blank?
-      html << "<div class=\"flash-error\">\n"
+      html << "<div class=\"flash-error\">"
+      html << "<h2>#{pluralize(object.errors.count, 'error')} prohibited this \
+               #{object.class.name.downcase} from being saved</h2>"
+      html << "<p>There were the problems with the following fields:</p>"
+      html << "<ul>"
       object.errors.full_messages.each do |error|
-        html << error << "<br>"
+        html << "<li>#{error}</li>"
       end
-      html << "</div>\n"
+      html << "</ul></div>"
     end
 
     raw(html)
@@ -156,7 +152,7 @@ module ApplicationHelper
     link_to tag.tag, tag_path(tag), class: tag.css_class, title: tag.description
   end
 
-  def time_ago_in_words_label(time, options = {})
+  def time_ago_in_words_label(time)
     ago = ""
     secs = (Time.current - time).to_i
     if secs <= 5
@@ -180,12 +176,6 @@ module ApplicationHelper
       ago = "#{years} #{'year'.pluralize(years)} ago"
     end
 
-    span_class = ''
-
-    if options[:mark_unread]
-      span_class += 'comment_unread'
-    end
-
-    raw(content_tag(:span, ago, title: time.strftime("%F %T %z"), class: span_class))
+    raw(content_tag(:span, ago, title: time.strftime("%F %T %z")))
   end
 end

@@ -17,14 +17,6 @@ describe Story do
     )
   end
 
-  it "has a limit on the story cache field" do
-    s = build(:story)
-    s.story_cache = "Z" * 16_777_218
-
-    s.valid?
-    expect(s.errors[:story_cache]).to eq(['is too long (maximum is 16777215 characters)'])
-  end
-
   it "has a limit on the twitter id field" do
     s = build(:story)
     s.twitter_id = "Z" * 25
@@ -310,6 +302,11 @@ describe Story do
       expect(s1.similar_stories).to eq([])
       expect(s2.similar_stories).to eq([])
     end
+
+    it "doesn't throw exceptions at brackets" do
+      s = create(:story, url: 'http://aaonline.fr/search.php?search&criteria[title-contains]=debian')
+      expect(s.similar_stories).to eq([])
+    end
   end
 
   describe "#calculated_hotness" do
@@ -318,8 +315,8 @@ describe Story do
     end
 
     before do
-      create(:comment, story: story, downvotes: 5, upvotes: 10)
-      create(:comment, story: story, downvotes: 10, upvotes: 5)
+      create(:comment, story: story, score: 1, flags: 5)
+      create(:comment, story: story, score: -9, flags: 10)
     end
 
     context "with positive base" do
@@ -352,6 +349,36 @@ describe Story do
         story.update_comments_count!
         expect(story.comments_count).to eq 1
         expect(merged_into_story.comments_count).to eq 1
+      end
+    end
+  end
+
+  describe "#already_posted_recently?" do
+    it "returns true when trying to submit a URL that's been submitted w/o an anchor in it" do
+      create(:story, url: "https://www.example.com/article.html")
+      story_has_url_with_anchor = build(:story, url: "https://www.example.com/article.html#main")
+
+      expect(story_has_url_with_anchor.already_posted_recently?).to be true
+    end
+
+    it "returns true when trying to submit a URL that's been submitted with an anchor in it" do
+      create(:story, url: "https://www.example.com/article.html#main")
+      story_has_url_without_anchor = build(:story, url: "https://www.example.com/article.html")
+
+      expect(story_has_url_without_anchor.already_posted_recently?).to be true
+    end
+  end
+
+  describe "scopes" do
+    context "recent" do
+      it "returns the newest stories that have not yet reached the front page" do
+        create(:story, title: "Front Page")
+        create(:story, title: "Front Page 2")
+        flagged = create(:story, title: "New Story", score: -2, flags: 3)
+        expect(Story.front_page).to_not include(flagged)
+
+        expect(Story.recent).to include(flagged)
+        expect(Story.recent).to_not include(Story.front_page)
       end
     end
   end
