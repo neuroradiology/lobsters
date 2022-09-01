@@ -1,6 +1,6 @@
 require 'rails_helper'
 
-describe 'stores', type: :request do
+describe 'stories', type: :request do
   let(:user) { create(:user) }
   let(:story) { create(:story, user: user) }
   let(:mod) { create(:user, :moderator) }
@@ -9,12 +9,9 @@ describe 'stores', type: :request do
     before { sign_in user }
 
     context "json" do
-      let(:headers) { { 'Content-Type' => 'application/json', 'Accept' => 'application/json' } }
-
       it "returns similar story matching URL" do
-        post "/stories/check_url_dupe",
-             params: { story: { title: "some other title", url: story.url } }.to_json,
-             headers: headers
+        post "/stories/check_url_dupe.json",
+             params: { story: { title: "some other title", url: story.url } }
 
         expect(response).to be_successful
 
@@ -32,9 +29,8 @@ describe 'stores', type: :request do
       end
 
       it "returns no matches if previously submitted URL is only partial match" do
-        post "/stories/check_url_dupe",
-             params: { story: { title: "some other title", url: story.url[0...-1] } }.to_json,
-             headers: headers
+        post "/stories/check_url_dupe.json",
+             params: { story: { title: "some other title", url: story.url[0...-1] } }
 
         expect(response).to be_successful
 
@@ -45,9 +41,8 @@ describe 'stores', type: :request do
       end
 
       it "returns no matches if no matching URL" do
-        post "/stories/check_url_dupe",
-             params: { story: { title: "some other title", url: "invalid_url" } }.to_json,
-             headers: headers
+        post "/stories/check_url_dupe.json",
+             params: { story: { title: "some other title", url: "invalid_url" } }
 
         expect(response).to be_successful
 
@@ -59,15 +54,13 @@ describe 'stores', type: :request do
 
       it "throws a 400 if there's no URL present" do
         expect {
-          post "/stories/check_url_dupe",
-               params: { story: { url: "" } }.to_json,
-               headers: headers
+          post "/stories/check_url_dupe.json",
+               params: { story: { url: "" } }
         }.to raise_error(ActionController::ParameterMissing)
 
         expect {
-          post "/stories/check_url_dupe",
-               params: { story: {} }.to_json,
-               headers: headers
+          post "/stories/check_url_dupe.json",
+               params: { story: {} }
         }.to raise_error(ActionController::ParameterMissing)
       end
     end
@@ -78,7 +71,12 @@ describe 'stores', type: :request do
 
     it "increments the user's count of deleted stories" do
       expect {
-        delete "/stories/#{story.short_id}"
+        put "/stories/#{story.short_id}/destroy", params: {
+          id: story.short_id,
+          story:  {
+            title: story.title,
+          },
+        }
       }.to change { user.stories_deleted_count }.by(1)
     end
   end
@@ -90,7 +88,12 @@ describe 'stores', type: :request do
 
     it "decrements the user's count of deleted stories" do
       expect {
-        post "/stories/#{deleted_story.short_id}/undelete"
+        put "/stories/#{deleted_story.short_id}/undelete", params: {
+          id: deleted_story.short_id,
+          story:  {
+            title: deleted_story.title,
+          },
+        }
       }.to change { user.stories_deleted_count }.by(-1)
     end
   end
@@ -134,6 +137,80 @@ describe 'stores', type: :request do
   end
 
   describe "show" do
+    it "displays a story" do
+      story = create(:story)
+      get story_path(story)
+
+      expect(response).to be_successful
+      expect(response.body).to include(story.title)
+    end
+
+    context "story removed by submitter" do
+      let(:story) { create(:story, is_deleted: false) }
+
+      # feels brittle to copy StoriesController and keep leaning on the
+      # log_moderation callback but too big a refactor right now
+      before do
+        story.is_deleted = true
+        story.editor = story.user
+        story.save!
+      end
+
+      it "404s to logged-out visitor" do
+        get story_path(story)
+
+        expect(response.status).to eq(404)
+        expect(response.body).to_not include(story.title)
+        expect(response.body).to_not include('removed by moderator')
+        expect(response.body).to_not include('removed by submitter')
+        expect(response.body).to_not include(story.user.username)
+      end
+
+      it "shows submitter removed to logged-in user" do
+        sign_in create(:user)
+        get story_path(story)
+
+        expect(response.status).to eq(404)
+        expect(response.body).to_not include(story.title)
+        expect(response.body).to include('removed by submitter')
+        expect(response.body).to include(story.user.username)
+      end
+    end
+
+    context "story removed by moderator" do
+      let(:story) { create(:story, is_deleted: false) }
+      let(:mod) { create(:user, :moderator) }
+      let(:reason) { "Unacceptably low ratio of cat photos to words." }
+
+      # feels brittle to copy StoriesController and keep leaning on the
+      # log_moderation callback but too big a refactor right now
+      before do
+        story.moderation_reason = reason
+        story.is_deleted = true
+        story.editor = mod
+        story.save!
+      end
+
+      it "404s to logged-out visitor" do
+        get story_path(story)
+
+        expect(response.status).to eq(404)
+        expect(response.body).to_not include(story.title)
+        expect(response.body).to_not include(reason)
+        expect(response.body).to_not include('removed by submitter')
+        expect(response.body).to_not include(story.user.username)
+      end
+
+      it "shows mod log to logged-in user" do
+        sign_in create(:user)
+        get story_path(story)
+
+        expect(response.status).to eq(404)
+        expect(response.body).to_not include(story.title)
+        expect(response.body).to include(reason)
+      end
+    end
+
     context "json" do
       let(:headers) { { 'Content-Type' => 'application/json', 'Accept' => 'application/json' } }
 
@@ -167,7 +244,7 @@ describe 'stores', type: :request do
 
     it 'does nothing to deleted comments' do
       expect {
-        target.is_expired = true
+        target.is_deleted = true
         target.editor = target.user
         target.save!
 

@@ -1,4 +1,4 @@
-<%= form_with model: @new_message, url: new_message, method: :post, local: true do |f| %>
+<%= form_with model: @new_message, url: new_message, method: :post do |f| %>
   <%= errors_for @new_message %>
 
   <% if replying %>
@@ -21,7 +21,7 @@
     <%= f.text_area :body, :style => "width: 500px;", :rows => 5 %>
   </div>
 
-  <% if @user.wearable_hats.any? %>
+  <% if @user.wearable_hats.load.any? %>
     <div class="boxline">
       <%= f.label :hat_id, 'Put on hat:' %>
       <%= f.select :hat_id, options_for_select( [['','']] +

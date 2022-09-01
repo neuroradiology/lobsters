@@ -1,8 +1,4 @@
 <div class="box wide">
-  <div class="legend">
-    Request a Hat
-  </div>
-
   <p>
   A hat is a formal, verified way of speaking officially for a project, organization, or company on Lobsters.
   A user can have more than one hat, but only wear one at a time on a comment or private message.
@@ -29,7 +25,7 @@
   Old messages will still show it and you won't be able to use it again.
   </p>
 
-  <%= form_with model: @hat_request, url: create_hat_request_path, local: true do |f| %>
+  <%= form_with model: @hat_request, url: create_hat_request_path do |f| %>
     <p>
     <%= f.label :hat, "Hat:" %>
     <%= f.text_field :hat, :size => 20,

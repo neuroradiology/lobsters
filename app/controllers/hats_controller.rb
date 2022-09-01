@@ -1,6 +1,7 @@
 class HatsController < ApplicationController
   before_action :require_logged_in_user, :except => [:index]
   before_action :require_logged_in_moderator, :except => [:build_request, :index, :create_request]
+  before_action :show_title_h1
 
   def build_request
     @title = "Request a Hat"
@@ -43,8 +44,8 @@ class HatsController < ApplicationController
   def approve_request
     @hat_request = HatRequest.find(params[:id])
     @hat_request.update!(params.require(:hat_request)
-      .permit(:hat, :link))
-    @hat_request.approve_by_user!(@user)
+      .permit(:hat, :link, :reason).except(:reason))
+    @hat_request.approve_by_user_for_reason!(@user, params[:hat_request][:reason])
 
     flash[:success] = "Successfully approved hat request."
 
@@ -53,7 +54,7 @@ class HatsController < ApplicationController
 
   def reject_request
     @hat_request = HatRequest.find(params[:id])
-    @hat_request.reject_by_user_for_reason!(@user, params[:hat_request][:rejection_comment])
+    @hat_request.reject_by_user_for_reason!(@user, params[:hat_request][:reason])
 
     flash[:success] = "Successfully rejected hat request."
 

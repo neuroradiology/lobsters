@@ -1,3 +1,7 @@
+# if you are looking at this file because your RSS reader is triggering the
+# rate-limiting, you can replace separate checks of /t/c.rss and /t/python.rss
+# with a single check of /t/c,python.rss (you can add many tags)
+
 Rack::Attack.safelist('localhost') do |req|
   '127.0.0.1' == req.ip || '::1' == req.ip
 end
@@ -14,12 +18,19 @@ Rack::Attack.throttle("user enumerator", limit: 30, period: 300) do |request|
 end
 # at some point they'll proceed to testing credentials
 Rack::Attack.throttle("login", limit: 4, period: 60) do |request|
-  request.ip if request.post? && request.path == '/login'
+  request.ip if request.post? && (
+                 request.path.start_with?('/login') ||
+                 request.path.start_with?('/login/set_new_password')
+               )
+end
+
+Rack::Attack.throttle("log4j probe", limit: 1, period: 1.week.to_i) do |request|
+  request.ip if request.user_agent.include? '${'
 end
 
 # explain the throttle
 Rack::Attack.throttled_response_retry_after_header = true
-Rack::Attack.throttled_response = lambda do |env|
+Rack::Attack.throttled_responder = lambda do |env|
   match_data = env['rack.attack.match_data']
   now = match_data[:epoch_time]
 

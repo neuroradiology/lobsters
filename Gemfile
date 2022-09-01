@@ -1,6 +1,6 @@
 source "https://rubygems.org"
 
-gem "rails", "~> 6.0.3.3"
+gem "rails", "~> 7.0.3.1"
 
 gem "mysql2"
 
@@ -21,7 +21,7 @@ gem "uglifier", ">= 1.3.0"
 # deployment
 gem "actionpack-page_caching"
 gem "exception_notification"
-gem "puma"
+gem "puma", ">= 5.6.2"
 
 # security
 gem "bcrypt", "~> 3.1.2"
@@ -30,9 +30,9 @@ gem "rqrcode"
 
 # parsing
 gem "pdf-reader"
-gem "nokogiri", ">= 1.11.0.rc4"
+gem "nokogiri", ">= 1.13.6"
 gem "htmlentities"
-gem "commonmarker", "~> 0.14"
+gem "commonmarker", ">= 0.23.4"
 
 # perf
 gem 'flamegraph'
@@ -51,9 +51,8 @@ gem 'rack-attack' # rate-limiting
 group :test, :development do
   gem 'capybara'
   gem 'database_cleaner'
-  gem 'good_migrations'
   gem "listen"
-  gem "rspec-rails"
+  gem 'rspec-rails', '~> 6.0.0.rc1'
   gem "factory_bot_rails"
   gem "rubocop", "0.81", require: false
   gem "rubocop-rails", require: false
