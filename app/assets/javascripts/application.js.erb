@@ -1,67 +1,15 @@
-//= require jquery
-//= require jquery_ujs
 //= require_tree .
+
+//= require tom-select.base.js
+//= require TomSelect_remove_button
+//= require TomSelect_caret_position
+//= require TomSelect_input_autogrow
 
 "use strict";
 
-var _Lobsters = Class.extend({
-  curUser: null,
-
-  runSelect2: function() {
-    $("#story_tags_a").select2({
-    formatSelection: function(what) {
-      return what.id;
-    },
-    matcher: function(term, text) {
-      return text.toUpperCase().indexOf(term.toUpperCase()) >= 0;
-    },
-    sortResults: function(results, container, query) {
-        if (query.term) {
-          var tmatches = [];
-          var dmatches = [];
-
-          /* prefer tag matches first, then description matches */
-          for (var x in results) {
-            var r = results[x];
-
-            if (r.id.toUpperCase().indexOf(query.term.toUpperCase()) == 0)
-              tmatches.push(r);
-            else
-              dmatches.push(r);
-          }
-
-          tmatches = tmatches.sort(function(a, b) {
-            return a.text.localeCompare(b.text);
-          });
-          dmatches = dmatches.sort(function(a, b) {
-            return a.text.localeCompare(b.text);
-          });
-
-          return tmatches.concat(dmatches);
-        }
-
-        return results;
-    }
-    });
-  },
-});
-
-var Lobsters = new _Lobsters();
-
-$(document).ready(function() {
-  Lobsters.runSelect2();
-});
-
-const parentSelector = (target, selector) => {
-  let parent = target;
-  while (!parent.matches(selector)) {
-    parent = parent.parentElement;
-    if (parent === null) {
-      throw new Error(`Did not match a parent of ${target} with the selector ${selector}`);
-    }
-  }
-  return parent;
-};
+const csrfToken = () => {
+  return qS('meta[name="csrf-token"]').getAttribute('content');
+}
 
 function on(eventTypes, selector, callback) {
   eventTypes.split(/ /).forEach( (eventType) => {
@@ -75,6 +23,33 @@ function on(eventTypes, selector, callback) {
 
 const onPageLoad = (callback) => {
   document.addEventListener('DOMContentLoaded', callback);
+};
+
+const parentSelector = (target, selector) => {
+  let parent = target;
+  while (!parent.matches(selector)) {
+    parent = parent.parentElement;
+    if (parent === null) {
+      throw new Error(`Did not match a parent of ${target} with the selector ${selector}`);
+    }
+  }
+  return parent;
+};
+
+const qS = (context, selector) => {
+  if (selector === undefined) {
+    selector = context;
+    context = document;
+  }
+  return context.querySelector(selector);
+};
+
+const qSA = (context, selector) => {
+  if (selector === undefined) {
+    selector = context;
+    context = document;
+  }
+  return context.querySelectorAll(selector);
 };
 
 const replace = (oldElement, newHTMLString) => {
@@ -98,16 +73,16 @@ const slideDownJS = (element) => {
 };
 
 const fetchWithCSRF = (url, params) => {
-  let csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
   params = params || {};
   params['headers'] = params['headers'] || new Headers;
-  params['headers'].append('X-CSRF-Token', csrfToken);
+  params['headers'].append('X-CSRF-Token', csrfToken());
+  params['headers'].append('X-Requested-With', 'XMLHttpRequest'); // request.xhr?
   return fetch(url, params);
-} 
+}
 
 const removeExtraInputs = () => {
-  // This deletion will resovle a bug that creates an extra hidden input when rendering the comment elements.
-  const extraInputs = document.querySelectorAll('.comment_folder_button + .comment_folder_button');
+  // This deletion will resolve a bug that creates an extra hidden input when rendering the comment elements
+  const extraInputs = qSA('.comment_folder_button + .comment_folder_button');
   for (const i of extraInputs) {
     i.remove();
   }
@@ -131,8 +106,7 @@ class _LobstersFunction {
   }
 
   modalFlaggingDropDown(flaggedItemType, voterEl, reasons) {
-    if (!Lobsters.curUser)
-      return Lobster.bounceToLogin();
+    if (!Lobster.curUser) return Lobster.bounceToLogin();
 
     const li = parentSelector(voterEl, '.story, .comment');
     if (li.classList.contains('flagged')) {
@@ -145,7 +119,7 @@ class _LobstersFunction {
       return
     }
 
-    if (document.querySelector("#flag_dropdown") || document.querySelector('#modal_backdrop')) {
+    if (qS('#flag_dropdown') || qS('#modal_backdrop')) {
       Lobster.removeFlagModal()
     }
 
@@ -178,38 +152,41 @@ class _LobstersFunction {
       body: formData,
     }).then (response => {
       response.text().then(text => {
-        document.querySelector('.form_errors_header').innerHTML = text;
+        // FIXME on second click of 'fetch title', this doesn't run
+        qS('.form_errors_header').innerHTML = text;
       });
     });
   }
 
-  checkStoryTitle() { //partial removal (due to select2)
-    const titleLocation = document.getElementById('story_title');
+  checkStoryTitle() {
+    const titleLocation = qS('#story_title');
     if (!titleLocation) return;
 
     const title = titleLocation.value;
     if (!title) return;
 
-    // Will check title for common phrases to be removed like "ask/show" lobsters :"
-    // Then it will add the keyword "ask/show" to the tags.
+    // Check for common prefixes like "ask lobsters:", remove it, and add the appropriate tag
     const m = title.match(/^(show|ask) lobste\.?rs:? (.+)$/i);
     if (m) {
-      const ta = $("#story_tags_a").data("select2");
-      if (ta.getVal().indexOf(m[1].toLowerCase()) < 0) {
-        ta.addSelectedChoice({ id: m[1].toLowerCase() });
-        $("#story_title").val(m[2]);
-      }
+      const titleEl = qS('#story_title');
+      Lobster.tom.addItem(m[1].toLowerCase());
+      titleEl.value = m[2];
     }
+
     // common separators or (parens) that don't enclose a 4-digit year
     if (title.match(/: | - | – | — | \| | · | • | by /) ||
        (title.match(/\([^\)]*\)/g) || []).some(function (p) { return !p.match(/\(\d{4}\)/) })) {
-          slideDownJS(document.querySelector('.title-reminder'));
+          slideDownJS(qS('.title-reminder'));
+
+    // else if the title doesn't contain concerns and reminder is visible
+    } else if (qS('.title-reminder').classList.contains('slide-down')) {
+      qS('.title-reminder-thanks').style.display = 'inline';
     }
   }
 
   fetchURLTitle(button) {
-    const targetUrl = document.getElementById('story_url').value;
-    const title_field = document.getElementById('story_title');
+    const targetUrl = qS('#story_url').value;
+    const title_field = qS('#story_title');
     const formData = new FormData();
     const old_text = button.textContent;
 
@@ -251,8 +228,8 @@ class _LobstersFunction {
   }
 
   removeFlagModal() {
-    document.getElementById("flag_dropdown").remove();
-    document.getElementById("modal_backdrop").remove();
+    qS('#flag_dropdown').remove();
+    qS('#modal_backdrop').remove();
   }
 
   postComment(form) {
@@ -282,17 +259,16 @@ class _LobstersFunction {
       .then(response => {
         response.text().then(text => {
           replace(form.parentElement, text);
-          autosize(document.querySelectorAll('textarea'));
+          autosize(qSA('textarea'));
         });
       });
   }
 
   previewStory(formElement) {
-    if(!Lobster.curUser)
-      return Lobster.bounceToLogin();
+    if (!Lobster.curUser) return Lobster.bounceToLogin();
 
     const formData = new FormData(formElement);
-    const previewElement = document.getElementById('inside');
+    const previewElement = qS('#inside');
     fetchWithCSRF('/stories/preview', {
       method: 'post',
       headers: new Headers({'X-Requested-With': 'XMLHttpRequest'}),
@@ -300,18 +276,13 @@ class _LobstersFunction {
     }).then(response => {
       response.text().then(text => {
         previewElement.innerHTML = text;
-        Lobsters.runSelect2();
+        Lobster.tomSelect();
       });
     });
   }
 
-  runSelect2() {  //requires [] (will actully replace select2)
-
-  }
-
   saveStory(saverEl) {
-    if (!Lobster.curUser)
-      return Lobster.bounceToLogin();
+    if (!Lobster.curUser) return Lobster.bounceToLogin();
 
     const li = parentSelector(saverEl, ".story, .comment");
     let act;
@@ -328,6 +299,39 @@ class _LobstersFunction {
     fetchWithCSRF("/stories/" + li.getAttribute("data-shortid") + "/" + act, {method: 'post'});
   }
 
+  tomSelect(item) {
+    if (!qS('#story_tags_a')) {
+      return
+    }
+
+    TomSelect.define('caret_position', caret_position);
+    TomSelect.define('input_autogrow', input_autogrow);
+    TomSelect.define('remove_button', remove_button);
+    this.tom = new TomSelect('#story_tags_a', {
+      plugins: ['caret_position', 'input_autogrow', 'remove_button'],
+      maxOptions: 200,
+      maxItems: 10,
+      hideSelected: true,
+      closeAfterSelect: true,
+      selectOnTab: true,
+      sortField: {field: "data-value"},
+      onInitialize: function() {
+        const parent = qS('.ts-control');
+        parent.appendChild(qS('.ts-dropdown'));
+      },
+      render: {
+        option: function(data) {
+          return '<div>' +
+            '<span class="dropDownItem">' + data.title + '</span>' +
+            '</div>';
+        },
+        item: function(data) {
+          return '<a class="data-ts-item ' + data.tagCss + '">' + data.value + '</div>';
+        }
+      }
+    });
+  }
+
   upvoteComment(voterEl) {
     Lobster.voteComment(voterEl, 1);
   }
@@ -337,11 +341,10 @@ class _LobstersFunction {
   }
 
   voteStory(voterEl, point, reason) {
-    if (!Lobster.curUser)
-      return Lobster.bounceToLogin();
+    if (!Lobster.curUser) return Lobster.bounceToLogin();
 
     const li = parentSelector(voterEl, '.story');
-    const scoreDiv = li.querySelector("div.score");
+    const scoreDiv = qS(li, 'div.score');
     const formData = new FormData();
     formData.append('reason', reason || '');
     let showScore = true;
@@ -379,8 +382,8 @@ class _LobstersFunction {
       }
       li.classList.remove("upvoted");
       li.classList.add("flagged");
-      if (li.parentElement.querySelector('.comment_folder_button')) {
-        li.parentElement.querySelector('.comment_folder_button').setAttribute("checked", true);
+      if (qS(li.parentElement, '.comment_folder_button')) {
+        qS(li.parentElement, '.comment_folder_button').setAttribute('checked', true);
       };
       showScore = false;
       score--;
@@ -392,14 +395,14 @@ class _LobstersFunction {
       scoreDiv.innerHTML = '~';
     }
     if (action == "upvote" || action == "unvote") {
-      if (li.querySelector(".reason")) {
-        li.querySelector(".reason").innerHTML = ""
+      if (qS(li, '.reason')) {
+        qS(li, '.reason').innerHTML = '';
       };
 
       if (action == "unvote" && point < 0)
-        li.querySelector(".flagger").textContent = "flag";
+        qS(li, '.flagger').textContent = 'flag';
       } else if (action == "flag") {
-        li.querySelector(".flagger").textContent = "unflag";
+        qS(li, '.flagger').textContent = 'unflag';
     }
 
     fetchWithCSRF("/stories/" + li.getAttribute("data-shortid") + "/" + action, {
@@ -408,11 +411,10 @@ class _LobstersFunction {
   }
 
   voteComment(voterEl, point, reason) {
-    if (!Lobster.curUser)
-      return Lobster.bounceToLogin();
+    if (!Lobster.curUser) return Lobster.bounceToLogin();
 
     const li = parentSelector(voterEl, ".comment");
-    const scoreDiv = li.querySelector("div.score");
+    const scoreDiv = qS(li, 'div.score');
     const formData = new FormData();
     formData.append('reason', reason || '');
     let showScore = true;
@@ -462,14 +464,14 @@ class _LobstersFunction {
     }
 
     if (action == "upvote" || action == "unvote") {
-      li.querySelector(".reason").innerHTML = ""
+      qS(li, '.reason').innerHTML = '';
     }
 
     if (action == "unvote" && point < 0) {
-      li.querySelector(".flagger").textContent = "flag";
+      qS(li, '.flagger').textContent = 'flag';
     } else if (action == "flag") {
-      li.querySelector(".flagger").textContent = "unflag";
-      li.querySelector(".reason").innerHTML = "| " + Lobster.commentFlagReasons[reason].toLowerCase();
+      qS(li, '.flagger').textContent = 'unflag';
+      qS(li, '.reason').innerHTML = "| " + Lobster.commentFlagReasons[reason].toLowerCase();
     }
 
     fetchWithCSRF("/comments/" + li.getAttribute("data-shortid") + "/" + action, {
@@ -482,39 +484,52 @@ const Lobster = new _LobstersFunction();
 
 onPageLoad(() => {
   Lobster.curUser = document.body.getAttribute('data-username'); // hack
-  autosize(document.querySelectorAll('textarea'));
+  autosize(qSA('textarea'));
 
-  // Global Functions
+  // replace csrf token in forms that may be fragment caches with page token
+  for (const i of qSA('form input[name="authenticity_token"]')) {
+    i.value = csrfToken();
+  }
+
+  // Global
 
   on('click', '.markdown_help_label', (event) => {
-    parentSelector(event.target, '.markdown_help_toggler').querySelector('.markdown_help').classList.toggle('display-block');
+    qS(parentSelector(event.target, '.markdown_help_toggler'), '.markdown_help').classList.toggle('display-block');
   });
 
   on('click', '#modal_backdrop', () => {
     Lobster.removeFlagModal()
-  })
+  });
 
-  // Account Settings Functions
+  on('click', '[data-confirm]', (event) => {
+    if (!confirm(event.target.dataset.confirm)) {
+      event.preventDefault();
+    }
+  });
+
+  // Account Settings
 
   on('focusout', '#user_homepage', (event) => {
     const homePage = event.target
     if (homePage.value.trim() !== '' && !homePage.value.match('^[a-z]+:\/\/'))
       homePage.value = 'https://' + homePage.value
-  })
+  });
 
-  // Inbox Related Funtions
+  // Inbox
 
   on('change', '#message_hat_id', (event) => {
     let selectedOption = event.target.selectedOptions[0];
-    document.getElementById('message_mod_note').checked = (selectedOption.getAttribute('data-modnote') === 'true');
+    qS('#message_mod_note').checked = (selectedOption.getAttribute('data-modnote') === 'true');
   });
 
-  // Story Related Functions
+  // Story
 
   Lobster.checkStoryTitle()
 
-  if (document.getElementById('story_url') && document.getElementById('story_preview') && !document.getElementById('story_preview').firstElementChild) {
-    document.getElementById('story_url').focus()
+  Lobster.tomSelect();
+
+  if (qS('#story_url') && qS('#story_preview') && !qS('#story_preview').firstElementChild) {
+    qS('#story_url').focus()
   }
 
   on('change', '#story_title', Lobster.checkStoryTitle);
@@ -545,7 +560,7 @@ onPageLoad(() => {
   on('click', 'li.story a.hider', (event) => {
     event.preventDefault();
     Lobster.hideStory(event.target);
-  })
+  });
 
   on('click', 'li.story a.saver', (event) => {
     event.preventDefault();
@@ -559,56 +574,85 @@ onPageLoad(() => {
   on('focusout', '#story_url', () => {
     let url_tags = {
       "\.pdf$": "pdf",
-      "[\/\.]((youtube|vimeo)\.com|youtu\.be|twitch.tv)\/": "video",
+      "[\/\.](asciinema\.org|(youtube|vimeo)\.com|youtu\.be|twitch.tv)\/": "video",
       "[\/\.](slideshare\.net|speakerdeck\.com)\/": "slides",
       "[\/\.](soundcloud\.com)\/": "audio",
     };
 
-    for (let u in url_tags) {
-      let tag = url_tags[u];
-
-      // can't remove the jquery until I replace select 2
-      if ($("#story_url").val().match(new RegExp(u, "i"))) {
-        var ta = $("#story_tags_a").data("select2");
-        if (ta.getVal().indexOf(tag) < 0)
-          ta.addSelectedChoice({ id: tag });
+    const storyUrlEl = qS('#story_url');
+    for (const [match, tag] of Object.entries(url_tags)) {
+      if (storyUrlEl.value.match(new RegExp(match, "i"))) {
+        Lobster.tom.addItem(tag.toLowerCase());
       }
     }
 
     // check for dupe if there's a URL, but not when editing existing
-    if (document.getElementById('story_url').value !== "" &&
-      (!document.querySelector('input[name="_method"]') ||
-      document.querySelector('input[name="_method"]').getAttribute('value') === 'put')) {
-        Lobster.checkStoryDuplicate(parentSelector(document.getElementById('story_url'), 'form'));
+    if (storyUrlEl.value !== "" &&
+      (!qS('input[name="_method"]') ||
+      qS('input[name="_method"]').getAttribute('value') === 'put')) {
+        Lobster.checkStoryDuplicate(parentSelector(storyUrlEl, 'form'));
     }
   });
 
-  // Comment Related Functions
+  // Disown
 
-  on('click', 'a.comment-disowner', (event) => {
-    if (confirm("Are you sure you want to disown this comment?")) {
-      let li = parentSelector(event.target, '.comment');
-      fetchWithCSRF('/comments/' + li.getAttribute('data-shortid') + '/disown', { method: 'post' })
+  on('submit', 'form.disowner-form', (event) => {
+    event.preventDefault();
+
+    let type = event.target.elements['type'].value;
+
+    if (confirm(`Are you sure you want to disown this ${type}?`)) {
+      let li = parentSelector(event.target, `.${type}`);
+
+      fetchWithCSRF(event.target.action, { method: 'post', body: new FormData(event.target) })
         .then(response => {
           response.text().then(text => replace(li, text));
         });
     }
   });
 
-  on("click", "a.comment_replier", (event) => {
-    if (!Lobsters.curUser) {
-      Lobster.bounceToLogin();
+  // Comment
+
+  // Remember story collapses; this is stored in localStorage for every story ID as an object
+  on('change', '.comment_folder_button', (e) => {
+    const commentId = e.target.getAttribute('data-shortid');
+    const storyId = qS('.story')?.getAttribute('data-shortid');
+    if (!storyId) return; // only remember or read these on story pages
+
+    var collapse = JSON.parse(localStorage.getItem("collapse_" + storyId) || '{}');
+    if (e.target.checked) {
+      collapse[commentId] = 1; // value unused, just truthy and short to serialize
+    } else {
+      delete collapse[commentId];
     }
+    localStorage.setItem("collapse_" + storyId, JSON.stringify(collapse));
+  });
+
+  // Collapse stories on load; the actual hiding is done in CSS; just need to switch the checkbox
+  (function() {
+    const storyId  = qS('.story')?.getAttribute('data-shortid');
+    if (!storyId) return; // only remember or read these on story pages
+    const collapse = JSON.parse(localStorage.getItem("collapse_" + storyId) || '{}');
+
+    for (var k in collapse) {
+      var folder = qS('input#comment_folder_' + k);
+      // comment may have been deleted
+      if (folder)
+        folder.checked = true;
+    }
+  })();
+
+  on("click", "a.comment_replier", (event) => {
+    event.preventDefault();
+    if (!Lobster.curUser) return Lobster.bounceToLogin();
 
     const comment = parentSelector(event.target, '.comment');
     const commentId = comment.getAttribute('id');
 
-    // Check to make sure we don't already have a reply box.
-    if (document.getElementById('reply_form_' + commentId)) {
-      return false;
-    }
+    // guard: don't create multiple reply boxes to one comment
+    if (qS('#reply_form_' + commentId)) { return false; }
 
-    // Inserts "> " on quoted text.
+    // Inserts "> " on quoted text
     let sel = document.getSelection().toString();
     if (sel != "") {
       sel = sel.split("\n").map(s => "> " + s + '\n\n').join('');
@@ -616,20 +660,21 @@ onPageLoad(() => {
     }
 
     let div = document.createElement('div');
-    if (document.querySelector('.comments_subtree')) {
-      parentSelector(comment, '.comments_subtree').lastElementChild.prepend(div);
-    } else {
-      comment.parentElement.lastElementChild.prepend(div);
-    }
+    div.innerHTML = '';
+    comment.lastElementChild.append(div);
 
-    fetch('/comments/' + comment.getAttribute('data-shortid') + '/reply')
+    fetchWithCSRF('/comments/' + comment.getAttribute('data-shortid') + '/reply')
       .then(response => {
         response.text().then(text => {
+          // guard: don't create multiple reply boxes to one comment
+          if (qS('#reply_form_' + commentId)) { return false; }
+
           div.innerHTML = text;
-          div.setAttribute('id', 'reply_form_' + commentId );
-          var ta = div.querySelector("textarea");
+          div.setAttribute('id', 'reply_form_' + commentId);
+
+          var ta = qS(div, 'textarea');
           ta.textContent = sel;
-          // This will place the cursor at the end of the quoted string and focus on your reply.
+          // place the cursor at the end of the quoted string
           ta.setSelectionRange(sel.length, sel.length);
           ta.focus();
           autosize(ta);
@@ -644,6 +689,7 @@ onPageLoad(() => {
   });
 
   on('click', '.comment #flag_dropdown a', (event) => {
+    event.preventDefault();
     if (event.target.getAttribute('data') != '') {
       Lobster.voteComment(parentSelector(event.target, '.comment'), -1,  event.target.getAttribute('data'));
     }
@@ -654,11 +700,11 @@ onPageLoad(() => {
     event.preventDefault();
     Lobster.upvoteComment(event.target);
   });
-  
+
   on('click', 'button.comment-preview', (event) => {
     Lobster.previewComment(parentSelector(event.target, 'form'));
   });
-  
+
   on('submit', '.comment_form_container form', (event) => {
     event.preventDefault();
     Lobster.postComment(event.target);
@@ -690,10 +736,10 @@ onPageLoad(() => {
       .then(response => {
         response.text().then(text => {
           replace(comment, text);
-          autosize(document.querySelectorAll('textarea'));
+          autosize(qSA('textarea'));
         });
       });
-    autosize(document.querySelectorAll('textarea'));
+    autosize(qSA('textarea'));
   });
 
   on("click", "a.comment_deletor", (event) => {
@@ -710,7 +756,7 @@ onPageLoad(() => {
 
   on('click', 'a.comment_undeletor', (event) => {
     event.preventDefault();
-    if (confirm("Are uou sure you want to undelete this comment?")) {
+    if (confirm("Are you sure you want to undelete this comment?")) {
       const comment = parentSelector(event.target, '.comment');
       const commentId = comment.getAttribute('data-shortid');
       fetchWithCSRF('/comments/' + commentId + '/undelete', {method: 'post'})
@@ -722,7 +768,7 @@ onPageLoad(() => {
 
   on('click', 'a.comment_moderator', (event) => {
     const reason = prompt("Moderation reason:");
-    if (reason == null || reason == '') 
+    if (reason == null || reason == '')
       return false;
 
     const formData = new FormData();
@@ -734,5 +780,39 @@ onPageLoad(() => {
         response.text().then(text => replace(comment, text));
       });
   });
-});
 
+  on('click', '.comment_unread', (event) => {
+    const nodes = qSA('.comment_unread')
+    const foundIndex = Array.from(nodes).findIndex(node => node === event.target)
+    const targetIndex = (foundIndex + 1) % nodes.length;
+    const targetY = nodes[targetIndex].getBoundingClientRect().top + window.scrollY
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    window.scrollTo({ top: targetY, behavior: reducedMotion ? 'instant' : 'smooth' })
+  });
+
+  // Story view
+
+  on('click', '.story_text_expander', (event) => {
+    event.preventDefault();
+    qS('#collapsed_story_text').style.display = 'block';
+  });
+
+  // Private messages
+
+  // inject js-only UI
+  const select_all = qSA('.with_select_all tr:first-child th:first-child');
+  for (const th of select_all) {
+    const checkbox = document.createElement('input');
+    checkbox.setAttribute('type', 'checkbox');
+    checkbox.classList.add('select_all');
+    th.append(checkbox);
+  }
+
+  on('click', '.select_all', (event) => {
+    const table = parentSelector(event.target, 'table');
+    const checkboxes = qSA(table, 'input[type=checkbox]');
+    for (const checkbox of checkboxes) {
+      checkbox.checked = event.target.checked;
+    }
+  });
+});
